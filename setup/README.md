@@ -34,7 +34,7 @@ sh setup/upgrade.sh
 >
 > Make a backup if needed: [utils/backup/create.sh](/utils/backup/create.sh).
 
-As the name suggests, this script is a quick way to setup a node:
+As the name suggests, this script should be used to quick-sync a node:
 
 - It stops the service (if it exists)
 - Installs all the necessary dependencies
@@ -48,13 +48,9 @@ As the name suggests, this script is a quick way to setup a node:
 ```
 sh setup/quick-sync.sh <moniker>
 ```
-
-**Example:** this initializes a node with the name _mynode_:
-
-```
-sh setup/quick-sync.sh mynode
-```
 > If you can't access the `genesisd` command afterwards, execute the `. ~/.bashrc` _or_ `source ~/.bashrc` command in your terminal.
+>
+> **IMPORTANT:** currently, snapshots must be bootstrapped manually. Please refer to the main README for further instructions.
 
 ## state-sync.sh
 
