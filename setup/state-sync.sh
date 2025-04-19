@@ -87,11 +87,12 @@ sh ./utils/fetch/state.sh
 # Fetch latest rpc_servers from genesis-parameters repo
 sh ./utils/fetch/rpcs.sh
 
-# Install service
-sh ./utils/service/install.sh
+# Install service (commented out)
+# sh ./utils/service/install.sh
 
 # Recalibrate state sync
 if sh ./utils/tools/restate-sync.sh; then
     echo ""
     echo "PS: if you're unable to access the $BINARY_NAME command, run '. ~/.bashrc' or 'source ~/.bashrc'."
+    echo "Optional: use utils/service/install.sh to install the node as a service (will be named $BINARY_NAME)."
 fi
