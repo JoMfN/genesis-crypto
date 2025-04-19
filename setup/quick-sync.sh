@@ -76,8 +76,8 @@ sh ./utils/fetch/state.sh
 # Fetch latest seeds and peers list from genesis-parameters repo
 sh ./utils/fetch/peers.sh
 
-# Reset to imported genesis.json
-$BINARY_NAME tendermint unsafe-reset-all
+# Reset to imported genesis.json (commented out)
+# $BINARY_NAME tendermint unsafe-reset-all
 
 # Install service (commented out)
 # sh ./utils/service/install.sh
