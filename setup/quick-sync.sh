@@ -86,7 +86,7 @@ sh ./utils/fetch/peers.sh
 echo ""
 echo "Done!"
 echo ""
-echo "o Check if you're able to access the $BINARY_NAME command. If you can't, run '. ~/.bashrc' or 'source ~/.bashrc' in your terminal."
+echo "o Check if you're able to access the $BINARY_NAME command. If you can't, run '. ~/.bashrc' or 'source ~/.bashrc' in your terminal. Then, proceed bootstrapping the snapshot via the steps provided in the README."
 echo "o If you haven't already created a key, use utils/key/create.sh or utils/key/import.sh to create or import a private key."
 echo "o Optional: use utils/service/install.sh to install the node as a service (will be named $BINARY_NAME)."
 echo "o When ready, turn on your node using '$BINARY_NAME start' or as a service: 'systemctl start $BINARY_NAME' (use 'journalctl -fu $BINARY_NAME -ocat' to see the service logs)."
