@@ -50,7 +50,7 @@ sh setup/quick-sync.sh <moniker>
 ```
 > If you can't access the `genesisd` command afterwards, execute the `. ~/.bashrc` _or_ `source ~/.bashrc` command in your terminal.
 >
-> **IMPORTANT:** currently, snapshots must be bootstrapped manually. Please refer to the main README for further instructions.
+> **IMPORTANT:** currently, snapshots must be bootstrapped manually. Please refer to the main [README](/README.md) for further instructions.
 
 ## state-sync.sh
 
