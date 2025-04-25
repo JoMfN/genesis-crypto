@@ -18,22 +18,14 @@ cat <<"EOF"
 | $$  \ $$| $$_____/| $$  | $$| $$_____/ \____  $$| $$ \____  $$      | $$        | $$       
 |  $$$$$$/|  $$$$$$$| $$  | $$|  $$$$$$$ /$$$$$$$/| $$ /$$$$$$$/      | $$$$$$$$ /$$$$$$     
  \______/  \_______/|__/  |__/ \_______/|_______/ |__/|_______/       |________/|______/     
-                                                                                             
+
 Welcome to the decentralized blockchain Renaissance, above money & beyond cryptocurrency!
 EOF
 
 echo ""
-echo "This script is intended for those who would like to join the mainnet using State Sync."
-echo "State Sync allows a node to join a network in a matter of minutes/hours, without having"
-echo "to worry about needing a lot of free disk space."
-echo ""
-echo "While this is favorable for the individual validator, it isn't necessarly from a broader"
-echo "network perspective since you do not have the entire history of the blockchain recorded."
-echo "So take this into consideration when deciding to state sync or not."
-echo ""
-echo "WARNING: Any config files will get overwritten and the data folder shall be removed, but there"
-echo "will be a backup and restore of the priv_validator_state.json file. If needed, use"
-echo "utils/backup/create.sh to create a backup."
+echo "This script should only be used if you intend on bootstrapping a snapshot of the GenesisL1 mainnet."
+echo "This will not take care of any backups! So make sure to do this if you have an existing .genesis"
+echo "folder already. You can use utils/backup/create.sh for this."
 echo ""
 read -p "Do you want to continue? (y/N): " ANSWER
 
@@ -53,7 +45,7 @@ REPO_ROOT=$(cd "$(dirname "$0")"/.. && pwd)
 # Arguments
 MONIKER=$1
 
-# Stop processes
+# Stop processes (if any are running)
 systemctl stop $BINARY_NAME
 
 # cd to root of the repository
@@ -78,21 +70,23 @@ cp "./configs/default_config.toml" $CONFIG_DIR/config.toml
 # Set moniker again since the configs got overwritten
 sed -i "s/moniker = .*/moniker = \"$MONIKER\"/" $CONFIG_DIR/config.toml
 
-# Fetch latest seeds and peers list from genesis-parameters repo
-sh ./utils/fetch/peers.sh
-
 # Fetch state file from genesis-parameters repo
 sh ./utils/fetch/state.sh
 
-# Fetch latest rpc_servers from genesis-parameters repo
-sh ./utils/fetch/rpcs.sh
+# Fetch latest seeds and peers list from genesis-parameters repo
+sh ./utils/fetch/peers.sh
+
+# Reset to imported genesis.json (commented out)
+# $BINARY_NAME tendermint unsafe-reset-all
 
 # Install service (commented out)
 # sh ./utils/service/install.sh
 
-# Recalibrate state sync
-if sh ./utils/tools/restate-sync.sh; then
-    echo ""
-    echo "PS: if you're unable to access the $BINARY_NAME command, run '. ~/.bashrc' or 'source ~/.bashrc'."
-    echo "Optional: use utils/service/install.sh to install the node as a service (will be named $BINARY_NAME)."
-fi
+# Echo result
+echo ""
+echo "Done!"
+echo ""
+echo "o Check if you're able to access the $BINARY_NAME command. If you can't, run '. ~/.bashrc' or 'source ~/.bashrc' in your terminal. Then, proceed bootstrapping the snapshot via the steps provided in the README."
+echo "o If you haven't already created a key, use utils/key/create.sh or utils/key/import.sh to create or import a private key."
+echo "o Optional: use utils/service/install.sh to install the node as a service (will be named $BINARY_NAME)."
+echo "o When ready, turn on your node using '$BINARY_NAME start' or as a service: 'systemctl start $BINARY_NAME' (use 'journalctl -fu $BINARY_NAME -ocat' to see the service logs)."
