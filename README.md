@@ -147,6 +147,12 @@ cd genesis-crypto
 git checkout v1.0.0
 ```
 
+> [!IMPORTANT]
+> Running this will **wipe the entire database** (the _/data_-folder **excluding** the priv_validator_state.json file). Therefore if you already have a node set up and you prefer not to have your GenesisL1 database lost, create a backup.
+>
+> You could use [utils/backup/create.sh](/utils/backup/create.sh) for this.
+>
+
 ```bash
 sh setup/state-sync.sh <moniker>
 ```
@@ -163,6 +169,7 @@ sh setup/state-sync.sh <moniker>
 
 > ⚠️ **Legacy Node Warning:**
 > If you're attempting a full-node sync from scratch, follow the instructions in the  (repo: [`genesis-ethermint`](https://github.com/alpha-omega-labs/genesis-ethermint)) and the node synced till height: `7400000` which caused it to panic.
+>
 
 Then to upgrade to the new **mainnet** (`genesis_29-2`):
 
@@ -246,9 +253,11 @@ sh utils/key/create.sh <walletname> <private_eth_key>
 > [!TIP]
 > 💡 **TIP:** Clear bash history:  
 > `history -c && exec bash`
+>
 
-> [!Note]
+> [!NOTE]
 > Transfer some L1 to the wallet you just created
+>
 
 to check your keys:
 
