@@ -24,49 +24,60 @@
 
 ---
 
-> [!IMPORTANT]
-> **For full-node syncing**
-> 
-> We were an Evmos-fork before deciding to hard fork to Cronos. If you do not want to **state sync** and instead prefer to sync a **full node**, follow the instructions in the [`genesis-ethermint`](https://github.com/alpha-omega-labs/genesis-ethermint) repository first.
+## 🧭 Introduction
 
-> 🔄 **UPDATED:**  
-> ## Become a Genesis Validator — The *REALLY EASY* Way  
-> A bootstrapped full node for the Cronos-fork **mainnet** (`genesis_29-2`) is available to bypass long fast-sync times, especially helpful during periods like the PDB mint.  
-> **Skip syncing from scratch. Jumpstart your Genesis node with a full backup and join the network in minutes.**  
-> This method uses a ~287GB compressed tar.lz4 archive of a 303GB node data folder.
+Due to the recent on-chain minting of the full Protein Data Bank (PDB), the size of the GenesisL1 blockchain has increased significantly. This data-heavy event resulted in a substantial boost to storage requirements and syncing time. To address this, the GenesisL1 community provides multiple streamlined methods to get a node up and running quickly — including a bootstrapped `data` folder backup that allows syncing within hours instead of several days.
+
+> ⚠️ **IMPORTANT:**
+> In **Step 2**, you will need to choose **one setup method**: Option A, B, or C. Only follow **one** of these — copying all three will cause your setup to fail.
+
+This repository is intended for those who want to join the Cronos-fork **mainnet**: `genesis_29-2`, using one of the following paths:
+
+### 🔹 OPTION A: Bootstrapped Snapshot (Fastest Setup)
+Use a fully synced 303GB `data` folder provided by the community, compressed to ~287GB.
+
+### 🔹 OPTION B: State Sync Setup (Recommended for New Nodes)
+Sync your node from a trusted block height using the built-in **state sync** mechanism.
+
+### 🔹 OPTION C: Upgrade Existing Node
+Migrate from the legacy Evmos-based network `genesis-ethermint` to the current Cronos-fork chain.
+
+> [!WARNING]
+> ⚠️ **Legacy Node Warning:**
+> 
+> We were an Evmos-fork before deciding to hard fork to Cronos. If you're attempting a full-node sync from scratch, follow the instructions in the [`genesis-ethermint`](https://github.com/alpha-omega-labs/genesis-ethermint) repository first.
+
 
 ---
 
-## Prerequisites
+## 1. ⚙️ System Requirements
 
-Install required tools and dependencies:
+### Hardware
+
+- **Disk**: 1000GB+ (NVMe M.2 SSD recommended)  
+- **RAM**: 8GB+ (16GB+ recommended)  
+- **CPU**: 4+ physical CPU cores | 8+ threads  
+- **Network**: > 100Mbit/s stable connection bothways 
+
+### Software Setup
+
+Debian based OS
 
 ```bash
 sudo apt update && sudo apt upgrade -y
-sudo apt install curl tar wget build-essential git make gcc git liblz4-tool htop unzip -y
+sudo apt install curl tar wget build-essential git make gcc liblz4-tool htop unzip -y
 ```
 
----
-
-## Node Requirements
-
-- **Disk**: 1000GB+ (NVMe M.2 SSD recommended)  
-- **RAM**: 8GB+ (16GB recommended)  
-- **CPU**: 4+ threads  
-- **Network**: > 1Gbit/s recommended
-
-> 💡 **TIP:**  
-> Create a Linux swap area to improve performance during high memory usage:
+### 💡 Enable Swap (Optional but Recommended)
 
 ```bash
-sudo swapoff -a
 sudo fallocate -l 8G /swapfile
 sudo chmod 600 /swapfile
 sudo mkswap /swapfile
 sudo swapon /swapfile
 ```
 
-To make the swap persistent:
+To persist:
 
 ```bash
 sudo cp /etc/fstab /etc/fstab.bak
@@ -74,25 +85,61 @@ echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 ```
 
 ---
-## Instructions
 
-The instructions provided here is suitable for those who would like to join the **mainnet**: `genesis_29-2` by **setting up a new node** from the bootstrapped version provided by validator *LCserve*.
+## 2. 🛠️ Node Setup Options
 
-> [!NOTE]
-> More details for every script mentioned in this README can be found in the folders where they are respectively stored: [/setup](/setup) or [/utils](/utils).
+> [!IMPORTANT]
+> Choose **one** method and expand the '>' :
 
-### 1. For time-efficiency start the download of the bootstrap folder 
-Begin this in a separate terminal — the download will take time (~287GB):
+### 🔹 A. Bootstrap with Provided Snapshot (Fastest; Trustfull)
+
+<details>
+<summary> Quick-Sync from provided `data` backup </summary>
 
 ```bash
 cd ~
 wget https://ftp.basementnodes.ca/genesis_backup_20250407082420.tar.lz4
+```
+
+let the download finish and grab a coffee. 
+
+setup the github repo.
+
+```bash
+git clone https://github.com/JoMfN/genesis-crypto.git
+cd genesis-crypto
+```
+
+create a `.genesis` folder with your config in the meanwhile.
+
+```bash
+sh setup/quick-sync.sh <moniker>
+```
+
+Follow the instructions in the terminal.
+
+check if a .genesis folder was generated.
+
+unzip the fully downloaded `data` folder 
+
+```bash
 lz4 -d genesis_backup_20250407082420.tar.lz4 | tar -xvf -
 ```
 
-### 2. Cloning the repository & checkout to branch `v1.0.0` for mainnet: `genesis_29-2`
+replace it with the one existing in `~/.genesis/data`
 
-Open a new terminal
+```bash
+mv genesis_backup_20250407082420/* ~/.genesis/
+```
+
+> ⚠️ Ensure `genesisd` is not running before replacing `.genesis`
+
+</details>
+
+### 🔹 B. State Sync from Recent Height (Trusted)
+
+<details>
+<summary> Setup a node _(using state sync)_ from a snapshot </summary>
 
 ```bash
 git clone https://github.com/alpha-omega-labs/genesis-crypto.git
@@ -100,46 +147,38 @@ cd genesis-crypto
 git checkout v1.0.0
 ```
 
-### 3. Node setup
-
-Depending on your circumstances, you'll either have to **Setup a node _(using state sync)_** (recommended) or start a node from scratch by starting with the evmos-fork version of genesis-ethermint (not recommended) 
-
-#### 3.1 Setup a node _(using state sync)_ and a bootstrap data 
-
-This helper script takes care of the needed steps to join the `genesis_29-2` network.
-
-> [!WARNING]
-> Running this will **wipe the entire database** (the _/data_-folder **excluding** the priv_validator_state.json file). Therefore if you already have a node set up and you prefer not to have your GenesisL1 database lost, create a backup.
->
-> You could use [utils/backup/create.sh](/utils/backup/create.sh) for this.
-
-To set up using state-sync (Fast-sync) and bootstrap:
-
 ```bash
 sh setup/state-sync.sh <moniker>
 ```
 
-> 💡 This installs dependencies and the `genesisd` binary.
+> 💡 This method will auto-install `genesisd` and dependencies
+
+</details>
+
+
+### 🔹 C. Upgrade from `genesis-ethermint` (Trustless)
 
 <details>
-<summary>⚙️ Upgrade an ethermint Node synced from scratch (not recommended)</summary>
+<summary>⚙️ Upgrade an ethermint Node synced from scratch </summary>
 
-Only use if syncing from scratch using the (repo: [`genesis-ethermint`](https://github.com/alpha-omega-labs/genesis-ethermint)) and the node synced till height: `7400000` which caused it to panic.
+> ⚠️ **Legacy Node Warning:**
+> If you're attempting a full-node sync from scratch, follow the instructions in the  (repo: [`genesis-ethermint`](https://github.com/alpha-omega-labs/genesis-ethermint)) and the node synced till height: `7400000` which caused it to panic.
 
-> [!IMPORTANT]
-> This should only be used if you run a **full-node** and have to perform the **"plan_crypto"**-upgrade.
+Then to upgrade to the new **mainnet** (`genesis_29-2`):
 
-```
+```bash
 sh setup/upgrade.sh
 ```
 
 </details>
 
-### 4. Daemon check
+---
+
+## 3. Daemon check
 
 If you can't access the `genesisd` command at this point, then you may need to execute:
 
-```
+```bash
 . ~/.bashrc
 ```
 > Or the equivalent: `source ~/.bashrc`
@@ -160,7 +199,7 @@ genesisd start --log_level warn
 **For AMD:**
 
 ```bash
-ver="1.21.6"
+ver="1.22.12"
 wget "https://golang.org/dl/go$ver.linux-amd64.tar.gz"
 sudo rm -rf /usr/local/go
 sudo tar -C /usr/local -xzf "go$ver.linux-amd64.tar.gz"
@@ -173,7 +212,7 @@ go version
 **For ARM (Raspberry Pi 5):**
 
 ```bash
-wget https://go.dev/dl/go1.22.1.linux-arm64.tar.gz 
+wget https://go.dev/dl/go1.22.12.linux-arm64.tar.gz 
 sudo rm -rf /usr/local/go
 sudo tar -C /usr/local -xzf "go1.22.1.linux-arm64.tar.gz"
 rm "go1.22.1.linux-arm64.tar.gz"
@@ -184,7 +223,9 @@ go version
 
 </details>
 
-### 5. Create or import a key (optional for just a node, required for validator node)
+---
+
+## 4. Create or import a key (optional for just a node, required for validator node)
 
 A key is necessary to interact with the network/node. If you haven't already created one, either import one or generate a new one, using:
 
@@ -238,64 +279,22 @@ Recover a wallet:
 ```bash
 genesisd keys add <walletname> --recover
 ```
+
 The terminal will request you to input the 24-words long seed phrase
 
 </details>
 
-### 6. Load Bootstrap Data
+---
 
-#### 6.1 Init Node
+## 5 installing genesisd as a service (optional)
 
-Important for this method to work is that you can generate a `~/.genesis` folder, verify this by:
-
-```
-ls .genesis/*
-```
-
-> [!NOTE]
-> Check if `.genesis/config` folder is ready:
-> else retry the helper script `sh setup/state-sync.sh <moniker>`once more
-> else try restarting the device after the bootstrap download finished and try helper script after restart
-
-#### 6.2 Load the Fast-Sync Data and Copy in the `.genesis` folder
-
-> [!WARNING]
-> Make sure that you don't have genesisd running for this step
-> Wait for the Download to complete (see step 1) and extract the full 303GB backup:
-
-```
-genesisd status 
-```
-
-should return a help page and no statistics of your node
-
-> [!NOTE]
-> Confirm every teminal with genesisd is close, if not then stop it (Ctrl + C).
-
-
-Move it into your `~/.genesis` directory:
-
-```bash
-mv genesis_backup_20250407082420/* ~/.genesis/
-```
-
-**Make sure to overwrite if prompted** — this excludes previous `priv_validator_state.json`, node keys, etc. because it is only the data folder.
-
-> [!WARNING]
-> Let it finish 100% before doing anything described below
-
-
-#### 6.3 Fire It Up!
+In general you can always start the node just once, and have to keep track of this terminal window by prompting: 
 
 ```bash
 genesisd start --log_level warn
 ```
 
-Watch the sync status by opening another terminal and prompt `genesisd status` again. When you are in sync this appears:
-
-```json
-"catching_up": false
-```
+This can be automized by installing it as a service checkout the details below.
 
 
 <details>
@@ -337,15 +336,9 @@ journalctl -fu genesisd -ocat
 
 </details>
 
-### 7. Become a validator (optional, also very welcoming)
+---
 
-Once your node is _up-and-running_, _fully synced_ and you have a _key_ created or imported, you could become a validator using:
-
-```
-sh setup/create-validator.sh <moniker> <walletname>
-```
-
-> This is a wizard and shall prompt the user only the required fields to create an on-chain validator.
+## 6. Become a validator (optional, also very welcoming)
 
 > [!Warning]
 > make sure you are in sync and `genesisd` is running
@@ -360,9 +353,23 @@ should show `"catching_up":false`
 "catching_up": false
 ```
 
+Once your node is _up-and-running_, _fully synced_ and you have a _key_ created or imported, you could become a validator using:
+
+```
+sh setup/create-validator.sh <moniker> <walletname>
+```
+
+> This is a wizard and shall prompt the user only the required fields to create an on-chain validator.
+
+
 <details>
 <summary>⚙️ Pro Validator Setup</summary>
 
+Watch the sync status by opening a new terminal and prompt `genesisd status` again. When you are in sync this appears:
+
+```json
+"catching_up": false
+```
 
 Adjust gas-prices and gas if the transaction gives the error out-of-gas
 
@@ -387,17 +394,30 @@ genesisd tx staking create-validator \
 
 </details>
 
-### 8. Explore utilities (optional)
+---
+
+## 7. Explore utilities
 
 > [!TIP]
 > The [/utils](/utils)-folder contains useful utilities one could use to manage their node (e.g. for fetching latest seeds and peers, fetching the genesis state, quickly shifting your config's ports, recalibrating your state sync etc.). To learn more about these, see the [README](utils/README.md) in the folder.
 
-### 9. FAQ and usefull links
+---
 
-To finalise
+### 7.1 FAQ and useful links
 
-> [!LINKS]
-> [`starv-team node installation guide`](https://stavr-team.gitbook.io/nodes-guides/mainnets/genesisl1/node-installation)
+FAQ -> Welcome for suggestions
+
+Useful links presented below 
+
+> [!TIP]
+> 
 > [`Checking status of your validator node at ping.pub`](https://ping.pub/genesisL1/uptime)
+>
+> [`MolNFT App`](https://app.molnft.org/)
+>
 > [`Anode team node installation guide`](https://anode.team/GenesisL1)
+>
+> [`starv-team node installation guide`](https://stavr-team.gitbook.io/nodes-guides/mainnets/genesisl1/node-installation)
+>
+
 
