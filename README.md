@@ -34,7 +34,7 @@ Due to the recent on-chain minting of the full Protein Data Bank (PDB), the size
 This repository is intended for those who want to join the Cronos-fork **mainnet**: `genesis_29-2`, using one of the following paths:
 
 ### 🔹 OPTION A: Bootstrapped Snapshot (Fastest Setup)
-Use a fully synced 303GB `data` folder provided by the community, compressed to ~287GB.
+Use a fully synced 622GB `data` folder provided by the community, compressed to ~543GB.
 
 ### 🔹 OPTION B: State Sync Setup (Recommended for New Nodes)
 Sync your node from a trusted block height using the built-in **state sync** mechanism.
@@ -101,6 +101,13 @@ cd ~
 wget https://ftp.basementnodes.ca/genesis_backup_20250407082420.tar.lz4
 ```
 
+If this one is currently unavailable try the following
+
+```bash
+cd ~
+wget http://85.122.195.176:55865/genesis_backup_20250505.tar.gz
+```
+
 let the download finish and grab a coffee. 
 
 setup the github repo.
@@ -126,10 +133,22 @@ unzip the fully downloaded `data` folder
 lz4 -d genesis_backup_20250407082420.tar.lz4 | tar -xvf -
 ```
 
+If you downloaded the .tar.gz file instead:
+
+```bash
+tar -xvzf genesis_backup_20250505.tar.gz
+```
+
 replace it with the one existing in `~/.genesis/data`
 
 ```bash
 mv genesis_backup_20250407082420/* ~/.genesis/
+```
+
+If you downloaded the .tar.gz file instead:
+
+```bash
+mv genesis_backup_20250505/* ~/.genesis/
 ```
 
 > ⚠️ Ensure `genesisd` is not running before replacing `.genesis`
@@ -429,4 +448,9 @@ Useful links presented below
 > [`starv-team node installation guide`](https://stavr-team.gitbook.io/nodes-guides/mainnets/genesisl1/node-installation)
 >
 
+## 8. Acknowledgements
 
+Special thanks to the contributors who made this bootstrap flow possible:
+
+- [@Zenodeapp](https://github.com/Zenodeapp) — for reviewing these instructions and optimizing the required scripting.
+- [@Cordtus](https://github.com/Cordtus) — for hosting and maintaining the FTP server for snapshot distribution.
