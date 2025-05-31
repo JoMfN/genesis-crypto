@@ -25,7 +25,32 @@ This script takes care of the needed steps to upgrade the node to the new fork:
 ```
 sh setup/upgrade.sh
 ```
-> After a successful upgrade, start the node again using `systemctl start tgenesisd` and monitor its status with `journalctl -fu tgenesisd -ocat`.
+> After a successful upgrade, start the node again using `systemctl start genesisd` and monitor its status with `journalctl -fu genesisd -ocat`.
+
+## quick-sync.sh
+
+> [!CAUTION]
+> Running this will **wipe the entire database** (the _/data_-folder **excluding** the priv_validator_state.json file).
+>
+> Make a backup if needed: [utils/backup/create.sh](/utils/backup/create.sh).
+
+As the name suggests, this script should be used to quick-sync a node:
+
+- It stops the service (if it exists)
+- Installs all the necessary dependencies
+- Builds the binaries
+- Resets config files
+- Fetches state, seeds and peers
+- Initializes the node
+
+### Usage
+
+```
+sh setup/quick-sync.sh <moniker>
+```
+> If you can't access the `genesisd` command afterwards, execute the `. ~/.bashrc` _or_ `source ~/.bashrc` command in your terminal.
+>
+> **IMPORTANT:** currently, snapshots must be bootstrapped manually. Please refer to the main [README](/README.md) for further instructions.
 
 ## state-sync.sh
 
@@ -44,7 +69,6 @@ This script takes care of the needed steps to join the network via State Sync:
 - Fetches latest seeds and peers
 - Fetches `genesis.json`-file
 - Fetches RPC servers
-- Installs the service
 - Recalibrates **[statesync]** settings to a recent height (**default:** `<latest_height>` - `2000`)
 
 ### Usage
