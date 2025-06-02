@@ -98,14 +98,14 @@ echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 
 ```bash
 cd ~
-wget https://ftp.basementnodes.ca/genesis_backup_20250407082420.tar.lz4
+wget https://ftp.basementnodes.ca/genesis_backup_20250428212110.tar.gz
 ```
 
 If this one is currently unavailable try the following
 
 ```bash
 cd ~
-wget http://85.122.195.176:55865/genesis_backup_20250505.tar.gz
+wget http://85.122.195.176:55865/genesis_backup.tar.gz
 ```
 
 let the download finish and grab a coffee. 
@@ -113,7 +113,7 @@ let the download finish and grab a coffee.
 setup the github repo.
 
 ```bash
-git clone https://github.com/JoMfN/genesis-crypto.git
+git clone https://github.com/alpha-omega-labs/genesis-crypto.git
 cd genesis-crypto
 ```
 
@@ -130,25 +130,25 @@ check if a .genesis folder was generated.
 unzip the fully downloaded `data` folder 
 
 ```bash
-lz4 -d genesis_backup_20250407082420.tar.lz4 | tar -xvf -
+tar -xvzf genesis_backup_20250428212110.tar.gz
 ```
 
 If you downloaded the .tar.gz file instead:
 
 ```bash
-tar -xvzf genesis_backup_20250505.tar.gz
+tar -xvzf genesis_backup.tar.gz
 ```
 
 replace it with the one existing in `~/.genesis/data`
 
 ```bash
-mv genesis_backup_20250407082420/* ~/.genesis/
+mv genesis_backup_20250428212110/* ~/.genesis/
 ```
 
 If you downloaded the .tar.gz file instead:
 
 ```bash
-mv genesis_backup_20250505/* ~/.genesis/
+mv genesis_backup/* ~/.genesis/
 ```
 
 > ⚠️ Ensure `genesisd` is not running before replacing `.genesis`
