@@ -100,14 +100,6 @@ echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 cd ~
 wget https://ftp.basementnodes.ca/genesis_backup_20250428212110.tar.gz
 ```
-
-If this one is currently unavailable try the following
-
-```bash
-cd ~
-wget http://85.122.195.176:55865/genesis_backup.tar.gz
-```
-
 let the download finish and grab a coffee. 
 
 setup the github repo.
@@ -133,22 +125,16 @@ unzip the fully downloaded `data` folder
 tar -xvzf genesis_backup_20250428212110.tar.gz
 ```
 
-If you downloaded the .tar.gz file instead:
-
-```bash
-tar -xvzf genesis_backup.tar.gz
-```
-
-replace it with the one existing in `~/.genesis/data`
+replace it with the one existing in `~/.genesis/data` 
 
 ```bash
 mv genesis_backup_20250428212110/* ~/.genesis/
 ```
 
-If you downloaded the .tar.gz file instead:
+If you downloaded another backup with different date .tar.gz file instead (make sure this is the only extracted backup folder then) :
 
 ```bash
-mv genesis_backup/* ~/.genesis/
+mv genesis_backup*/* ~/.genesis/
 ```
 
 > ⚠️ Ensure `genesisd` is not running before replacing `.genesis`
