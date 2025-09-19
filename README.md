@@ -98,7 +98,8 @@ echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 
 ```bash
 cd ~
-wget https://ftp.basementnodes.ca/genesis_backup_20250428212110.tar.gz
+wget http://85.122.195.176:37264/dataNoWal.zip
+#Out wget https://ftp.basementnodes.ca/genesis_backup_20250428212110.tar.gz
 ```
 let the download finish and grab a coffee. 
 
@@ -122,13 +123,15 @@ check if a .genesis folder was generated.
 unzip the fully downloaded `data` folder 
 
 ```bash
-tar -xvzf genesis_backup_20250428212110.tar.gz
+unzip dataNoWal.zip
+#tar -xvzf genesis_backup_20250428212110.tar.gz
 ```
 
 replace it with the one existing in `~/.genesis/data` 
 
 ```bash
-mv genesis_backup_20250428212110/* ~/.genesis/
+mv data ~/.genesis/
+#mv genesis_backup_20250428212110/* ~/.genesis/
 ```
 
 If you downloaded another backup with different date .tar.gz file instead (make sure this is the only extracted backup folder then) :
