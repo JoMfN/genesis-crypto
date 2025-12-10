@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/alpha-omega-labs/genesis-parameters/main/assets/l1-logo.png" alt="GenesisL1" width="150" height="150"/>
+  <img src="https://avatars.githubusercontent.com/u/88520218" alt="GenesisL1" width="150" height="150"/>
 </p>
 
 <p align="center">
@@ -45,7 +45,7 @@ Migrate from the legacy Evmos-based network `genesis-ethermint` to the current C
 > [!WARNING]
 > ⚠️ **Legacy Node Warning:**
 > 
-> We were an Evmos-fork before deciding to hard fork to Cronos. If you're attempting a full-node sync from scratch, follow the instructions in the [`genesis-ethermint`](https://github.com/alpha-omega-labs/genesis-ethermint) repository first.
+> We were an Evmos-fork before deciding to hard fork to Cronos. If you're attempting a full-node sync from scratch, follow the instructions in the [`genesis-ethermint`](https://github.com/GenesisL1/genesis-ethermint) repository first.
 
 
 ---
@@ -161,7 +161,7 @@ mv genesis_backup_20250505/* ~/.genesis/
 <summary> Setup a node _(using state sync)_ from a snapshot </summary>
 
 ```bash
-git clone https://github.com/alpha-omega-labs/genesis-crypto.git
+git clone https://github.com/GenesisL1/genesis-crypto.git
 cd genesis-crypto
 git checkout v1.0.0
 ```
@@ -187,7 +187,7 @@ sh setup/state-sync.sh <moniker>
 <summary>⚙️ Upgrade an ethermint Node synced from scratch </summary>
 
 > ⚠️ **Legacy Node Warning:**
-> If you're attempting a full-node sync from scratch, follow the instructions in the  (repo: [`genesis-ethermint`](https://github.com/alpha-omega-labs/genesis-ethermint)) and the node synced till height: `7400000` which caused it to panic.
+> If you're attempting a full-node sync from scratch, follow the instructions in the  (repo: [`genesis-ethermint`](https://github.com/GenesisL1/genesis-ethermint)) and the node synced till height: `7400000` which caused it to panic.
 >
 
 Then to upgrade to the new **mainnet** (`genesis_29-2`):
