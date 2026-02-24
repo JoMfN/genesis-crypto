@@ -18,6 +18,7 @@ import (
 	appparams "cosmossdk.io/simapp/params"
 	runtimeservices "github.com/cosmos/cosmos-sdk/runtime/services"
 	"golang.org/x/exp/slices"
+        sdkmath "cosmossdk.io/math"
 
 	dbm "github.com/cometbft/cometbft-db"
 	abci "github.com/cometbft/cometbft/abci/types"
@@ -165,7 +166,7 @@ import (
 )
 
 const (
-	Name = "cronos"
+	Name = "genesis"
 
 	// AddrLen is the allowed length (in bytes) for an address.
 	//
@@ -232,6 +233,7 @@ func init() {
 	}
 
 	DefaultNodeHome = filepath.Join(userHomeDir, "."+Name)
+        sdk.DefaultPowerReduction = sdkmath.NewIntFromUint64(1000000000000000000)
 }
 
 // GenModuleBasics generate basic module manager

@@ -11,7 +11,7 @@ build() {
     network=$1
     host="$2"
     name="$3"
-    pkg="cronosd${network}-${build_type}"
+    pkg="genesisd${network}-${build_type}"
     if [[ "$host" == "native" ]]; then
         if [[ "${build_platform: -6}" == "-linux" ]]; then
             # static link for linux targets
@@ -28,7 +28,7 @@ build() {
         fi
     fi
     echo "building $FLAKE"
-    nix build -L "$FLAKE"
+    nix build --no-update-lock-file --no-allow-dirty -L "$FLAKE"
     cp result "cronos_${ref_name_clean:1}${network}_${name}.tar.gz"
 }
 

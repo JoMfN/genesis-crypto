@@ -1,6 +1,7 @@
 BUILDDIR ?= $(CURDIR)/build
 PACKAGES=$(shell go list ./... | grep -v '/simulation')
 COVERAGE ?= coverage.txt
+BINARY_NAME = genesisd
 
 GOPATH ?= $(shell $(GO) env GOPATH)
 BINDIR ?= ~/go/bin
@@ -79,8 +80,8 @@ comma := ,
 build_tags_comma_sep := $(subst $(whitespace),$(comma),$(build_tags))
 
 # process linker flags
-ldflags += -X github.com/cosmos/cosmos-sdk/version.Name=cronos \
-	-X github.com/cosmos/cosmos-sdk/version.AppName=cronosd \
+ldflags += -X github.com/cosmos/cosmos-sdk/version.Name=genesis \
+	-X github.com/cosmos/cosmos-sdk/version.AppName=$(BINARY_NAME) \
 	-X github.com/cosmos/cosmos-sdk/version.Version=$(VERSION) \
 	-X github.com/cosmos/cosmos-sdk/version.Commit=$(COMMIT) \
 	-X github.com/cosmos/cosmos-sdk/version.BuildTags=$(build_tags_comma_sep)
@@ -93,10 +94,10 @@ endif
 
 all: build
 build: check-network print-ledger go.sum
-	@go build -mod=readonly $(BUILD_FLAGS) -o $(BUILDDIR)/cronosd ./cmd/cronosd
+	@go build -mod=readonly $(BUILD_FLAGS) -o $(BUILDDIR)/$(BINARY_NAME) ./cmd/cronosd
 
 install: check-network print-ledger go.sum
-	@go install -mod=readonly $(BUILD_FLAGS) ./cmd/cronosd
+	@go build -mod=readonly $(BUILD_FLAGS)  -o $${GOBIN:-$$(go env GOPATH)/bin}/$(BINARY_NAME) ./cmd/cronosd
 
 test:
 	@go test -v -mod=readonly $(PACKAGES) -coverprofile=$(COVERAGE) -covermode=atomic
@@ -176,8 +177,8 @@ test-sim-after-import: runsim
 
 test-sim-custom-genesis-multi-seed: runsim
 	@echo "Running multi-seed custom genesis simulation..."
-	@echo "By default, ${HOME}/.cronosd/config/genesis.json will be used."
-	@$(BINDIR)/runsim -Genesis=${HOME}/.cronosd/config/genesis.json -SimAppPkg=$(SIMAPP) -ExitOnFail 400 5 TestFullAppSimulation
+	@echo "By default, ${HOME}/.$(BINARY_NAME)/config/genesis.json will be used."
+	@$(BINDIR)/runsim -Genesis=${HOME}/.$(BINARY_NAME)/config/genesis.json -SimAppPkg=$(SIMAPP) -ExitOnFail 400 5 TestFullAppSimulation
 
 test-sim-multi-seed-long: runsim
 	@echo "Running long multi-seed application simulation. This may take awhile!"
