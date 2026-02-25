@@ -29,8 +29,10 @@ import (
 	clientkeeper "github.com/cosmos/ibc-go/v7/modules/core/02-client/keeper"
 	"github.com/cosmos/ibc-go/v7/modules/core/exported"
 	ibctmmigrations "github.com/cosmos/ibc-go/v7/modules/light-clients/07-tendermint/migrations"
+
 	cronostypes "github.com/crypto-org-chain/cronos/v2/x/cronos/types"
 	icaauthtypes "github.com/crypto-org-chain/cronos/v2/x/icaauth/types"
+
 	v0evmtypes "github.com/evmos/ethermint/x/evm/migrations/v0/types"
 	evmtypes "github.com/evmos/ethermint/x/evm/types"
 	feemarkettypes "github.com/evmos/ethermint/x/feemarket/types"
@@ -38,6 +40,7 @@ import (
 
 func (app *App) RegisterUpgradeHandlers(cdc codec.BinaryCodec, clientKeeper clientkeeper.Keeper) {
 	planName := "v1.1.0"
+
 	// Set param key table for params module migration
 	for _, subspace := range app.ParamsKeeper.GetSubspaces() {
 		var keyTable paramstypes.KeyTable
@@ -77,12 +80,15 @@ func (app *App) RegisterUpgradeHandlers(cdc codec.BinaryCodec, clientKeeper clie
 			subspace.WithKeyTable(keyTable)
 		}
 	}
+
 	baseAppLegacySS := app.ParamsKeeper.Subspace(baseapp.Paramspace).WithKeyTable(paramstypes.ConsensusParamsKeyTable())
+
 	app.UpgradeKeeper.SetUpgradeHandler(planName, func(ctx sdk.Context, plan upgradetypes.Plan, fromVM module.VersionMap) (module.VersionMap, error) {
 		// OPTIONAL: prune expired tendermint consensus states to save storage space
 		if _, err := ibctmmigrations.PruneExpiredConsensusStates(ctx, cdc, clientKeeper); err != nil {
 			return nil, err
 		}
+
 		// explicitly update the IBC 02-client params, adding the localhost client type
 		params := clientKeeper.GetParams(ctx)
 		params.AllowedClients = append(params.AllowedClients, exported.Localhost)
@@ -90,6 +96,7 @@ func (app *App) RegisterUpgradeHandlers(cdc codec.BinaryCodec, clientKeeper clie
 
 		// Migrate Tendermint consensus parameters from x/params module to a dedicated x/consensus module.
 		baseapp.MigrateParams(ctx, baseAppLegacySS, &app.ConsensusParamsKeeper)
+
 		if icaModule, ok := app.mm.Modules[icatypes.ModuleName].(ica.AppModule); ok {
 			// set the ICS27 consensus version so InitGenesis is not run
 			version := icaModule.ConsensusVersion()
@@ -104,9 +111,23 @@ func (app *App) RegisterUpgradeHandlers(cdc codec.BinaryCodec, clientKeeper clie
 			icaModule.InitModule(ctx, controllerParams, icahosttypes.Params{})
 		}
 
+		// Helpful debug: show current value before migrations
+		pre := app.CronosKeeper.GetParams(ctx)
+		ctx.Logger().Info("pre-migration cronos params", "IbcCroDenom", pre.IbcCroDenom)
+
 		m, err := app.mm.RunMigrations(ctx, app.configurator, fromVM)
 		if err != nil {
 			return m, err
+		}
+
+		// Post-migration: ensure the param is set to a valid default (some fresh chains have it empty).
+		post := app.CronosKeeper.GetParams(ctx)
+		if post.IbcCroDenom == "" || !cronostypes.IsValidIBCDenom(post.IbcCroDenom) {
+			post.IbcCroDenom = cronostypes.IbcCroDenomDefaultValue
+			app.CronosKeeper.SetParams(ctx, post)
+			ctx.Logger().Info("post-migration cronos params fixed", "IbcCroDenom", post.IbcCroDenom)
+		} else {
+			ctx.Logger().Info("post-migration cronos params ok", "IbcCroDenom", post.IbcCroDenom)
 		}
 
 		// enlarge block gas limit
@@ -116,6 +137,7 @@ func (app *App) RegisterUpgradeHandlers(cdc codec.BinaryCodec, clientKeeper clie
 		}
 		consParams.Block.MaxGas = 60_000_000
 		app.ConsensusParamsKeeper.Set(ctx, consParams)
+
 		return m, nil
 	})
 
@@ -132,6 +154,7 @@ func (app *App) RegisterUpgradeHandlers(cdc codec.BinaryCodec, clientKeeper clie
 	if err != nil {
 		panic(fmt.Sprintf("failed to read upgrade info from disk %s", err))
 	}
+
 	if !app.UpgradeKeeper.IsSkipHeight(upgradeInfo.Height) {
 		if upgradeInfo.Name == planName {
 			storeUpgrades := storetypes.StoreUpgrades{
