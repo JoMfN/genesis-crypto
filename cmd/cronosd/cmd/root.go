@@ -4,19 +4,21 @@ import (
 	"errors"
 	"io"
 	"os"
-	"path/filepath"
 
-	"github.com/cosmos/cosmos-sdk/simapp/params"
+	"cosmossdk.io/simapp/params"
+	"github.com/cosmos/cosmos-sdk/server"
 	"github.com/cosmos/cosmos-sdk/types/module"
 
+	dbm "github.com/cometbft/cometbft-db"
+	tmcfg "github.com/cometbft/cometbft/config"
+	tmcli "github.com/cometbft/cometbft/libs/cli"
+	"github.com/cometbft/cometbft/libs/log"
 	"github.com/spf13/cast"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-	tmcfg "github.com/tendermint/tendermint/config"
-	tmcli "github.com/tendermint/tendermint/libs/cli"
-	"github.com/tendermint/tendermint/libs/log"
-	dbm "github.com/tendermint/tm-db"
 
+	rosettaCmd "cosmossdk.io/tools/rosetta/cmd"
+	"github.com/cosmos/cosmos-sdk/baseapp"
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/client/config"
 	"github.com/cosmos/cosmos-sdk/client/debug"
@@ -24,7 +26,6 @@ import (
 	"github.com/cosmos/cosmos-sdk/client/pruning"
 	"github.com/cosmos/cosmos-sdk/client/rpc"
 	"github.com/cosmos/cosmos-sdk/client/snapshot"
-	"github.com/cosmos/cosmos-sdk/server"
 	servertypes "github.com/cosmos/cosmos-sdk/server/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	authcmd "github.com/cosmos/cosmos-sdk/x/auth/client/cli"
@@ -32,24 +33,26 @@ import (
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 	"github.com/cosmos/cosmos-sdk/x/crisis"
 	genutilcli "github.com/cosmos/cosmos-sdk/x/genutil/client/cli"
-
+	genutiltypes "github.com/cosmos/cosmos-sdk/x/genutil/types"
 	ethermintclient "github.com/evmos/ethermint/client"
 	"github.com/evmos/ethermint/crypto/hd"
 	ethermintserver "github.com/evmos/ethermint/server"
 	servercfg "github.com/evmos/ethermint/server/config"
 	ethermint "github.com/evmos/ethermint/types"
 
-	"github.com/crypto-org-chain/cronos/app"
-	"github.com/crypto-org-chain/cronos/cmd/cronosd/experimental"
-	"github.com/crypto-org-chain/cronos/cmd/cronosd/opendb"
 	memiavlcfg "github.com/crypto-org-chain/cronos/store/config"
-	"github.com/crypto-org-chain/cronos/x/cronos"
+	"github.com/crypto-org-chain/cronos/v2/app"
+	"github.com/crypto-org-chain/cronos/v2/cmd/cronosd/opendb"
+	"github.com/crypto-org-chain/cronos/v2/x/cronos"
 	// this line is used by starport scaffolding # stargate/root/import
 )
 
 const EnvPrefix = "CRONOS"
 
 var ChainID string
+
+// skip gravity module or not in the binary.
+const SkipGravity = true
 
 // NewRootCmd creates a new root command for simd. It is called once in the
 // main function.
@@ -65,14 +68,14 @@ func NewRootCmd() (*cobra.Command, params.EncodingConfig) {
 		WithLegacyAmino(encodingConfig.Amino).
 		WithInput(os.Stdin).
 		WithAccountRetriever(types.AccountRetriever{}).
-		WithBroadcastMode(flags.BroadcastBlock).
+		WithBroadcastMode(flags.BroadcastSync).
 		WithHomeDir(app.DefaultNodeHome).
 		WithKeyringOptions(hd.EthSecp256k1Option()).
 		WithViper(EnvPrefix)
 
 	rootCmd := &cobra.Command{
 		Use:   app.Name + "d",
-		Short: "GenesisL1 Daemon",
+		Short: "Genesis L1 Daemon",
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
 			// set the default command outputs
 			cmd.SetOut(cmd.OutOrStdout())
@@ -116,7 +119,7 @@ func initRootCmd(rootCmd *cobra.Command, encodingConfig params.EncodingConfig) {
 		ethermintclient.ValidateChainID(
 			WrapInitCmd(app.DefaultNodeHome),
 		),
-		genutilcli.CollectGenTxsCmd(banktypes.GenesisBalancesIterator{}, app.DefaultNodeHome),
+		genutilcli.CollectGenTxsCmd(banktypes.GenesisBalancesIterator{}, app.DefaultNodeHome, genutiltypes.DefaultMessageValidator),
 		genutilcli.MigrateGenesisCmd(),
 		WrapGenTxCmd(encodingConfig.TxConfig, banktypes.GenesisBalancesIterator{}, app.DefaultNodeHome),
 		WrapValidateGenesisCmd(),
@@ -130,18 +133,17 @@ func initRootCmd(rootCmd *cobra.Command, encodingConfig params.EncodingConfig) {
 		// this line is used by starport scaffolding # stargate/root/commands
 	)
 
-	changeSetCmd := ChangeSetCmd()
-	if changeSetCmd != nil {
-		rootCmd.AddCommand(changeSetCmd)
-	}
-
 	opts := ethermintserver.StartOptions{
 		AppCreator:      a.newApp,
 		DefaultNodeHome: app.DefaultNodeHome,
 		DBOpener:        opendb.OpenDB,
 	}
 	ethermintserver.AddCommands(rootCmd, opts, a.appExport, addModuleInitFlags)
-	experimental.AddCommands(rootCmd)
+
+	changeSetCmd := ChangeSetCmd()
+	if changeSetCmd != nil {
+		rootCmd.AddCommand(changeSetCmd)
+	}
 
 	// add keybase, auxiliary RPC, query, and tx child commands
 	rootCmd.AddCommand(
@@ -152,7 +154,7 @@ func initRootCmd(rootCmd *cobra.Command, encodingConfig params.EncodingConfig) {
 	)
 
 	// add rosetta
-	rootCmd.AddCommand(server.RosettaCommand(encodingConfig.InterfaceRegistry, encodingConfig.Codec))
+	rootCmd.AddCommand(rosettaCmd.RosettaCommand(encodingConfig.InterfaceRegistry, encodingConfig.Codec))
 }
 
 func addModuleInitFlags(startCmd *cobra.Command) {
@@ -177,6 +179,7 @@ func queryCommand() *cobra.Command {
 		rpc.BlockCommand(),
 		authcmd.QueryTxsByEventsCmd(),
 		authcmd.QueryTxCmd(),
+		rpc.QueryEventForTxCmd(),
 	)
 
 	app.ModuleBasics.AddQueryCommands(cmd)
@@ -237,10 +240,7 @@ type appCreator struct {
 
 // newApp is an AppCreator
 func (a appCreator) newApp(logger log.Logger, db dbm.DB, traceStore io.Writer, appOpts servertypes.AppOptions) servertypes.Application {
-	snapshotDir := filepath.Join(cast.ToString(appOpts.Get(flags.FlagHome)), "data", "snapshots")
-	if err := os.MkdirAll(snapshotDir, os.ModePerm); err != nil {
-		panic(err)
-	}
+	home := cast.ToString(appOpts.Get(flags.FlagHome))
 
 	skipUpgradeHeights := make(map[int64]bool)
 	for _, h := range cast.ToIntSlice(appOpts.Get(server.FlagUnsafeSkipUpgrades)) {
@@ -248,9 +248,10 @@ func (a appCreator) newApp(logger log.Logger, db dbm.DB, traceStore io.Writer, a
 	}
 
 	baseappOptions := server.DefaultBaseappOptions(appOpts)
+
 	return app.New(
-		logger, db, traceStore, true, skipUpgradeHeights,
-		cast.ToString(appOpts.Get(flags.FlagHome)),
+		logger, db, traceStore, true, SkipGravity, skipUpgradeHeights,
+		home,
 		cast.ToUint(appOpts.Get(server.FlagInvCheckPeriod)),
 		a.encCfg,
 		// this line is used by starport scaffolding # stargate/root/appArgument
@@ -261,8 +262,14 @@ func (a appCreator) newApp(logger log.Logger, db dbm.DB, traceStore io.Writer, a
 
 // appExport creates a new simapp (optionally at a given height)
 func (a appCreator) appExport(
-	logger log.Logger, db dbm.DB, traceStore io.Writer, height int64, forZeroHeight bool, jailAllowedAddrs []string,
+	logger log.Logger,
+	db dbm.DB,
+	traceStore io.Writer,
+	height int64,
+	forZeroHeight bool,
+	jailAllowedAddrs []string,
 	appOpts servertypes.AppOptions,
+	modulesToExport []string,
 ) (servertypes.ExportedApp, error) {
 	var anApp *app.App
 
@@ -277,12 +284,14 @@ func (a appCreator) appExport(
 			db,
 			traceStore,
 			false,
+			SkipGravity,
 			map[int64]bool{},
 			homePath,
 			uint(1),
 			a.encCfg,
 			// this line is used by starport scaffolding # stargate/root/exportArgument
 			appOpts,
+			baseapp.SetChainID(app.TestAppChainID),
 		)
 
 		if err := anApp.LoadHeight(height); err != nil {
@@ -294,16 +303,18 @@ func (a appCreator) appExport(
 			db,
 			traceStore,
 			true,
+			SkipGravity,
 			map[int64]bool{},
 			homePath,
 			uint(1),
 			a.encCfg,
 			// this line is used by starport scaffolding # stargate/root/noHeightExportArgument
 			appOpts,
+			baseapp.SetChainID(app.TestAppChainID),
 		)
 	}
 
-	return anApp.ExportAppStateAndValidators(forZeroHeight, jailAllowedAddrs)
+	return anApp.ExportAppStateAndValidators(forZeroHeight, jailAllowedAddrs, modulesToExport)
 }
 
 func overwriteFlagDefaults(c *cobra.Command, defaults map[string]string) {
@@ -325,47 +336,32 @@ func overwriteFlagDefaults(c *cobra.Command, defaults map[string]string) {
 	}
 }
 
-// WrapValidateGenesisCmd extends `genutilcli.ValidateGenesisCmd` to support `--unsafe-experimental` flag.
+// WrapValidateGenesisCmd extends `genutilcli.ValidateGenesisCmd`.
 func WrapValidateGenesisCmd() *cobra.Command {
 	wrapCmd := genutilcli.ValidateGenesisCmd(module.NewBasicManager())
 	wrapCmd.RunE = func(cmd *cobra.Command, args []string) error {
-		experimental, err := cmd.Flags().GetBool(cronos.ExperimentalFlag)
-		if err != nil {
-			return err
-		}
-		moduleBasics := app.GenModuleBasics(experimental)
+		moduleBasics := app.GenModuleBasics()
 		return genutilcli.ValidateGenesisCmd(moduleBasics).RunE(cmd, args)
 	}
-	wrapCmd.Flags().Bool(cronos.ExperimentalFlag, false, "Enable experimental features")
 	return wrapCmd
 }
 
-// WrapInitCmd extends `genutilcli.InitCmd` to support `--unsafe-experimental` flag.
+// WrapInitCmd extends `genutilcli.InitCmd`.
 func WrapInitCmd(home string) *cobra.Command {
 	wrapCmd := genutilcli.InitCmd(module.NewBasicManager(), home)
 	wrapCmd.RunE = func(cmd *cobra.Command, args []string) error {
-		experimental, err := cmd.Flags().GetBool(cronos.ExperimentalFlag)
-		if err != nil {
-			return err
-		}
-		moduleBasics := app.GenModuleBasics(experimental)
+		moduleBasics := app.GenModuleBasics()
 		return genutilcli.InitCmd(moduleBasics, home).RunE(cmd, args)
 	}
-	wrapCmd.Flags().Bool(cronos.ExperimentalFlag, false, "Enable experimental features")
 	return wrapCmd
 }
 
-// WrapGenTxCmd extends `genutilcli.GenTxCmd` to support `--unsafe-experimental` flag.
+// WrapGenTxCmd extends `genutilcli.GenTxCmd`.
 func WrapGenTxCmd(txEncCfg client.TxEncodingConfig, genBalIterator banktypes.GenesisBalancesIterator, defaultNodeHome string) *cobra.Command {
 	wrapCmd := genutilcli.GenTxCmd(module.NewBasicManager(), txEncCfg, genBalIterator, defaultNodeHome)
 	wrapCmd.RunE = func(cmd *cobra.Command, args []string) error {
-		experimental, err := cmd.Flags().GetBool(cronos.ExperimentalFlag)
-		if err != nil {
-			return err
-		}
-		moduleBasics := app.GenModuleBasics(experimental)
+		moduleBasics := app.GenModuleBasics()
 		return genutilcli.GenTxCmd(moduleBasics, txEncCfg, genBalIterator, defaultNodeHome).RunE(cmd, args)
 	}
-	wrapCmd.Flags().Bool(cronos.ExperimentalFlag, false, "Enable experimental features")
 	return wrapCmd
 }

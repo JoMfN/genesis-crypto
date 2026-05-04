@@ -2,7 +2,12 @@ import base64
 import json
 from pathlib import Path
 
-import sha3
+from eth_abi import encode, is_encodable, is_encodable_type
+from eth_account._utils.encode_typed_data.encoding_and_hashing import hash_type
+from eth_account.messages import SignableMessage
+from eth_hash.auto import keccak
+from google.protobuf import any_pb2
+from hexbytes import HexBytes
 
 from .protobuf.cosmos.bank.v1beta1.tx_pb2 import MsgSend
 from .protobuf.cosmos.base.v1beta1.coin_pb2 import Coin
@@ -18,7 +23,6 @@ from .protobuf.cosmos.tx.v1beta1.tx_pb2 import (
 )
 from .protobuf.ethermint.crypto.v1.ethsecp256k1.keys_pb2 import PubKey as EPubKey
 from .protobuf.ethermint.types.v1.web3_pb2 import ExtensionOptionsWeb3Tx
-from .protobuf.google.protobuf.any_pb2 import Any
 
 LEGACY_AMINO = 127
 SIGN_DIRECT = 1
@@ -212,9 +216,8 @@ def create_transaction_with_multiple_messages(
         account_number,
     )
 
-    hash_amino = sha3.keccak_256()
-    hash_amino.update(sig_doc_amino.SerializeToString())
-    to_sign_amino = hash_amino.hexdigest()
+    hash_amino = keccak.new(sig_doc_amino.SerializeToString())
+    to_sign_amino = hash_amino.digest()
 
     # SignDirect
     sig_info_direct = create_signer_info(
@@ -230,19 +233,18 @@ def create_transaction_with_multiple_messages(
         chain_id,
         account_number,
     )
-    hash_direct = sha3.keccak_256()
-    hash_direct.update(sign_doc_direct.SerializeToString())
-    to_sign_direct = hash_direct.hexdigest()
+    hash_direct = keccak.new(sign_doc_direct.SerializeToString())
+    to_sign_direct = hash_direct.digest()
     return {
         "legacyAmino": {
             "body": body,
             "authInfo": auth_info_amino,
-            "signBytes": base64.b64decode(to_sign_amino),
+            "signBytes": to_sign_amino,
         },
         "signDirect": {
             "body": body,
             "authInfo": auth_info_direct,
-            "signBytes": base64.b64decode(to_sign_direct),
+            "signBytes": to_sign_direct,
         },
     }
 
@@ -256,7 +258,7 @@ def create_body_with_multiple_messages(messages, memo):
 
 
 def create_any_message(msg):
-    any = Any()
+    any = any_pb2.Any()
     any.Pack(msg["message"], "/")
     return any
 
@@ -353,4 +355,92 @@ def create_tx_raw_eip712(body, auth_info, extension):
         body.SerializeToString(),
         auth_info.SerializeToString(),
         [bytes()],
+    )
+
+
+# eth-account removed this the legacy encode_data implementation
+def encode_structured_data_legacy(structured_data):
+    from eth_utils import keccak
+
+    def encode_field_old(types, name, field_type, value):
+        if value is None:
+            raise ValueError(f"Missing value for field {name} of type {field_type}")
+
+        if field_type in types:
+            return ("bytes32", keccak(encode_data_old(field_type, types, value)))
+
+        if field_type == "bytes":
+            if not isinstance(value, bytes):
+                raise TypeError(
+                    f"Value of field `{name}` ({value}) is of the type "
+                    f"`{type(value)}`, but expected bytes value"
+                )
+            return ("bytes32", keccak(value))
+
+        if field_type == "string":
+            if not isinstance(value, str):
+                raise TypeError(
+                    f"Value of field `{name}` ({value}) is of the type "
+                    f"`{type(value)}`, but expected string value"
+                )
+            return ("bytes32", keccak(text=value))
+
+        if field_type.endswith("]"):
+            field_type_of_inside_array = field_type[: field_type.rindex("[")]
+            field_type_value_pairs = [
+                encode_field_old(types, name, field_type_of_inside_array, item)
+                for item in value
+            ]
+
+            if value:
+                data_types, data_hashes = zip(*field_type_value_pairs)
+            else:
+                data_types, data_hashes = [], []
+
+            return ("bytes32", keccak(encode(data_types, data_hashes)))
+
+        if not is_encodable_type(field_type):
+            raise TypeError(f"Received Invalid type `{field_type}` in field `{name}`")
+
+        if is_encodable(field_type, value):
+            return (field_type, value)
+        else:
+            raise TypeError(
+                f"Value of `{name}` ({value}) is not encodable as type `{field_type}`. "
+                f"If the base type is correct, verify that the value does not "
+                f"exceed the specified size for the type."
+            )
+
+    def encode_data_old(primary_type, types, data):
+
+        encoded_types = ["bytes32"]
+        encoded_values = [hash_type(primary_type, types)]
+
+        for field in types[primary_type]:
+            type_val, value = encode_field_old(
+                types, field["name"], field["type"], data[field["name"]]
+            )
+            encoded_types.append(type_val)
+            encoded_values.append(value)
+
+        return encode(encoded_types, encoded_values)
+
+    domain_hash = keccak(
+        encode_data_old(
+            "EIP712Domain", structured_data["types"], structured_data["domain"]
+        )
+    )
+
+    message_hash = keccak(
+        encode_data_old(
+            structured_data["primaryType"],
+            structured_data["types"],
+            structured_data["message"],
+        )
+    )
+
+    return SignableMessage(
+        HexBytes(b"\x01"),
+        domain_hash,
+        message_hash,
     )

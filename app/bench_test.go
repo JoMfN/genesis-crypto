@@ -4,25 +4,30 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"math/big"
+	"os"
+	"path/filepath"
 	"testing"
 
 	sdkmath "cosmossdk.io/math"
+	dbm "github.com/cometbft/cometbft-db"
+	abci "github.com/cometbft/cometbft/abci/types"
+	"github.com/cometbft/cometbft/libs/log"
+	tmproto "github.com/cometbft/cometbft/proto/tendermint/types"
+	tmtypes "github.com/cometbft/cometbft/types"
+	baseapp "github.com/cosmos/cosmos-sdk/baseapp"
+	servertypes "github.com/cosmos/cosmos-sdk/server/types"
 	"github.com/cosmos/cosmos-sdk/testutil/mock"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
-	"github.com/crypto-org-chain/cronos/x/cronos/types"
+	memiavlstore "github.com/crypto-org-chain/cronos/store"
+	"github.com/crypto-org-chain/cronos/v2/x/cronos/types"
 	"github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/evmos/ethermint/crypto/ethsecp256k1"
 	"github.com/evmos/ethermint/tests"
 	evmtypes "github.com/evmos/ethermint/x/evm/types"
 	"github.com/stretchr/testify/require"
-	abci "github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/libs/log"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
-	tmtypes "github.com/tendermint/tendermint/types"
-	dbm "github.com/tendermint/tm-db"
 )
 
 // BenchmarkERC20Transfer benchmarks execution of standard erc20 token transfer transactions
@@ -36,14 +41,25 @@ func BenchmarkERC20Transfer(b *testing.B) {
 		require.NoError(b, err)
 		benchmarkERC20Transfer(b, db)
 	})
+	b.Run("memiavl", func(b *testing.B) {
+		benchmarkERC20Transfer(b, nil)
+	})
 }
 
+// pass `nil` to db to use memiavl
 func benchmarkERC20Transfer(b *testing.B, db dbm.DB) {
 	txsPerBlock := 1000
 	gasPrice := big.NewInt(100000000000)
-
+	var appOpts servertypes.AppOptions = EmptyAppOptions{}
+	if db == nil {
+		appOpts = AppOptionsMap(map[string]interface{}{
+			memiavlstore.FlagMemIAVL: true,
+		})
+		require.NoError(b, os.RemoveAll(filepath.Join(DefaultNodeHome, "data/memiavl.db")))
+	}
 	encodingConfig := MakeEncodingConfig()
-	app := New(log.NewNopLogger(), db, nil, true, map[int64]bool{}, DefaultNodeHome, 0, encodingConfig, EmptyAppOptions{})
+	app := New(log.NewNopLogger(), db, nil, true, true, map[int64]bool{}, DefaultNodeHome, 0, encodingConfig, appOpts, baseapp.SetChainID(TestAppChainID))
+	defer app.Close()
 
 	priv, err := ethsecp256k1.GenerateKey()
 	address := common.BytesToAddress(priv.PubKey().Address().Bytes())
@@ -52,7 +68,7 @@ func benchmarkERC20Transfer(b *testing.B, db dbm.DB) {
 	ethSigner := ethtypes.LatestSignerForChainID(chainID)
 
 	signTx := func(msg *evmtypes.MsgEthereumTx) ([]byte, error) {
-		msg.From = address.String()
+		msg.From = address.Bytes()
 		if err := msg.Sign(ethSigner, signer); err != nil {
 			return nil, err
 		}
@@ -75,20 +91,20 @@ func benchmarkERC20Transfer(b *testing.B, db dbm.DB) {
 		Address: acc.GetAddress().String(),
 		Coins:   sdk.NewCoins(sdk.NewCoin(evmtypes.DefaultEVMDenom, sdkmath.NewIntWithDecimal(10000000, 18))),
 	}
-	genesisState := NewDefaultGenesisState(encodingConfig.Codec, true)
+	genesisState := NewDefaultGenesisState(encodingConfig.Codec)
 	genesisState = genesisStateWithValSet(b, app, genesisState, valSet, []authtypes.GenesisAccount{acc}, balance)
 
 	appState, err := json.MarshalIndent(genesisState, "", "  ")
 	require.NoError(b, err)
 	app.InitChain(abci.RequestInitChain{
-		ChainId:         SimAppChainID,
+		ChainId:         TestAppChainID,
 		AppStateBytes:   appState,
 		ConsensusParams: DefaultConsensusParams,
 	})
 	app.BeginBlock(abci.RequestBeginBlock{
 		Header: tmproto.Header{
 			Height:          1,
-			ChainID:         SimAppChainID,
+			ChainID:         TestAppChainID,
 			ProposerAddress: consAddress,
 		},
 	})
@@ -130,7 +146,7 @@ func benchmarkERC20Transfer(b *testing.B, db dbm.DB) {
 		app.BeginBlock(abci.RequestBeginBlock{
 			Header: tmproto.Header{
 				Height:          int64(i) + 2,
-				ChainID:         SimAppChainID,
+				ChainID:         TestAppChainID,
 				ProposerAddress: consAddress,
 			},
 		})

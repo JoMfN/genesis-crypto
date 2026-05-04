@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/cosmos/cosmos-sdk/client/flags"
@@ -18,10 +19,14 @@ import (
 	"github.com/cosmos/cosmos-sdk/client"
 	genutilcli "github.com/cosmos/cosmos-sdk/x/genutil/client/cli"
 	genutiltypes "github.com/cosmos/cosmos-sdk/x/genutil/types"
-	ibcfeetypes "github.com/cosmos/ibc-go/v5/modules/apps/29-fee/types"
-	"github.com/crypto-org-chain/cronos/x/cronos/types"
+	icagenesistypes "github.com/cosmos/ibc-go/v7/modules/apps/27-interchain-accounts/genesis/types"
+	icatypes "github.com/cosmos/ibc-go/v7/modules/apps/27-interchain-accounts/types"
+	ibcfeetypes "github.com/cosmos/ibc-go/v7/modules/apps/29-fee/types"
+	"github.com/crypto-org-chain/cronos/v2/x/cronos/types"
+	icaauthtypes "github.com/crypto-org-chain/cronos/v2/x/icaauth/types"
 	evmtypes "github.com/evmos/ethermint/x/evm/types"
 	feemarkettypes "github.com/evmos/ethermint/x/feemarket/types"
+	gravitytypes "github.com/peggyjv/gravity-bridge/module/v2/x/gravity/types"
 )
 
 // GetTxCmd returns the transaction commands for this module
@@ -39,8 +44,9 @@ func GetTxCmd() *cobra.Command {
 	cmd.AddCommand(CmdConvertTokens())
 	cmd.AddCommand(CmdSendToCryptoOrg())
 	cmd.AddCommand(CmdUpdateTokenMapping())
+	cmd.AddCommand(CmdTurnBridge())
+	cmd.AddCommand(CmdUpdatePermissions())
 	cmd.AddCommand(MigrateGenesisCmd())
-
 	return cmd
 }
 
@@ -121,6 +127,7 @@ const (
 
 // NewSubmitTokenMappingChangeProposalTxCmd returns a CLI command handler for creating
 // a token mapping change proposal governance transaction.
+// Deprecated: please use submit-proposal instead.
 func NewSubmitTokenMappingChangeProposalTxCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "token-mapping-change [denom] [contract]",
@@ -141,7 +148,7 @@ $ %s tx gov submit-legacy-proposal token-mapping-change gravity0x0000...0000 0x0
 				return err
 			}
 
-			title, err := cmd.Flags().GetString(govcli.FlagTitle) //nolint:staticcheck
+			title, err := cmd.Flags().GetString(govcli.FlagTitle)
 			if err != nil {
 				return err
 			}
@@ -200,7 +207,7 @@ $ %s tx gov submit-legacy-proposal token-mapping-change gravity0x0000...0000 0x0
 			return tx.GenerateOrBroadcastTxCLI(clientCtx, cmd.Flags(), msg)
 		},
 	}
-	cmd.Flags().String(govcli.FlagTitle, "", "The proposal title")             //nolint:staticcheck
+	cmd.Flags().String(govcli.FlagTitle, "", "The proposal title")
 	cmd.Flags().String(govcli.FlagDescription, "", "The proposal description") //nolint:staticcheck
 	cmd.Flags().String(govcli.FlagDeposit, "", "The proposal deposit")
 	cmd.Flags().String(FlagSymbol, "", "The coin symbol")
@@ -255,6 +262,63 @@ func CmdUpdateTokenMapping() *cobra.Command {
 	return cmd
 }
 
+// CmdTurnBridge returns a CLI command handler for enable or disable the bridge
+func CmdTurnBridge() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "turn-bridge [true/false]",
+		Short: "Turn Bridge",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			clientCtx, err := client.GetClientTxContext(cmd)
+			if err != nil {
+				return err
+			}
+
+			enable, err := strconv.ParseBool(args[0])
+			if err != nil {
+				return err
+			}
+			msg := types.NewMsgTurnBridge(clientCtx.GetFromAddress().String(), enable)
+			if err := msg.ValidateBasic(); err != nil {
+				return err
+			}
+			return tx.GenerateOrBroadcastTxCLI(clientCtx, cmd.Flags(), msg)
+		},
+	}
+
+	flags.AddTxFlagsToCmd(cmd)
+	return cmd
+}
+
+// CmdUpdatePermissions returns a CLI command handler for updating cronos permissions
+func CmdUpdatePermissions() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "update-permissions [address] [permissions]",
+		Short: "Update Permissions, permission value: 1=CanChangeTokenMapping, 2:=CanTurnBridge, 3=All",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			clientCtx, err := client.GetClientTxContext(cmd)
+			if err != nil {
+				return err
+			}
+
+			argsAddress := args[0]
+			argPermissions, err := strconv.ParseUint(args[1], 10, 64)
+			if err != nil {
+				return err
+			}
+			msg := types.NewMsgUpdatePermissions(clientCtx.GetFromAddress().String(), argsAddress, argPermissions)
+			if err := msg.ValidateBasic(); err != nil {
+				return err
+			}
+			return tx.GenerateOrBroadcastTxCLI(clientCtx, cmd.Flags(), msg)
+		},
+	}
+
+	flags.AddTxFlagsToCmd(cmd)
+	return cmd
+}
+
 type ExportEvmGenesisState struct {
 	evmtypes.GenesisState
 	Params ExportEvmParams `json:"params"`
@@ -280,6 +344,18 @@ func Migrate(appState genutiltypes.AppMap, clientCtx client.Context) genutiltype
 	// Add feeibc with default genesis.
 	if appState[ibcfeetypes.ModuleName] == nil {
 		appState[ibcfeetypes.ModuleName] = clientCtx.Codec.MustMarshalJSON(ibcfeetypes.DefaultGenesisState())
+	}
+	// Add gravity with default genesis.
+	if appState[gravitytypes.ModuleName] == nil {
+		appState[gravitytypes.ModuleName] = clientCtx.Codec.MustMarshalJSON(gravitytypes.DefaultGenesisState())
+	}
+	// Add interchainaccounts with default genesis.
+	if appState[icatypes.ModuleName] == nil {
+		appState[icatypes.ModuleName] = clientCtx.Codec.MustMarshalJSON(icagenesistypes.DefaultGenesis())
+	}
+	// Add icaauth with default genesis.
+	if appState[icaauthtypes.ModuleName] == nil {
+		appState[icaauthtypes.ModuleName] = clientCtx.Codec.MustMarshalJSON(icaauthtypes.DefaultGenesis())
 	}
 	var evmState ExportEvmGenesisState
 	err := json.Unmarshal(appState[evmtypes.ModuleName], &evmState)

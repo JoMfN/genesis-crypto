@@ -14,10 +14,17 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "unmarked: fallback mark for unmarked tests")
     config.addinivalue_line("markers", "slow: marks tests as slow")
     config.addinivalue_line("markers", "gravity: gravity bridge test cases")
+    config.addinivalue_line("markers", "ica: marks ica tests")
     config.addinivalue_line("markers", "upgrade: marks upgrade tests")
     config.addinivalue_line("markers", "ibc: marks default ibc tests")
+    config.addinivalue_line("markers", "ibc_rly_evm: marks ibc_rly_evm tests")
+    config.addinivalue_line("markers", "ibc_rly_gas: marks ibc relayer gas tests")
     config.addinivalue_line("markers", "ibc_timeout: marks ibc timeout tests")
     config.addinivalue_line("markers", "ibc_update_client: marks ibc updateclient test")
+    config.addinivalue_line("markers", "gov: marks gov related tests")
+    config.addinivalue_line("markers", "gas: marks gas related tests")
+    config.addinivalue_line("markers", "mint: marks mint module tests")
+    config.addinivalue_line("markers", "evm: marks evm module tests")
 
 
 def pytest_collection_modifyitems(items, config):

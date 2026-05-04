@@ -5,14 +5,19 @@ import (
 	"testing"
 	"time"
 
-	cronosmodulekeeper "github.com/crypto-org-chain/cronos/x/cronos/keeper"
-	keepertest "github.com/crypto-org-chain/cronos/x/cronos/keeper/mock"
-	"github.com/crypto-org-chain/cronos/x/cronos/types"
+	cronosmodulekeeper "github.com/crypto-org-chain/cronos/v2/x/cronos/keeper"
+	keepertest "github.com/crypto-org-chain/cronos/v2/x/cronos/keeper/mock"
+	"github.com/crypto-org-chain/cronos/v2/x/cronos/types"
 
 	evmtypes "github.com/evmos/ethermint/x/evm/types"
 
+	"github.com/cometbft/cometbft/crypto/tmhash"
+	tmproto "github.com/cometbft/cometbft/proto/tendermint/types"
+	tmversion "github.com/cometbft/cometbft/proto/tendermint/version"
+	"github.com/cometbft/cometbft/version"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
+	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
 	minttypes "github.com/cosmos/cosmos-sdk/x/mint/types"
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 	"github.com/ethereum/go-ethereum/common"
@@ -21,12 +26,13 @@ import (
 	ethermint "github.com/evmos/ethermint/types"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/tendermint/tendermint/crypto/tmhash"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
-	tmversion "github.com/tendermint/tendermint/proto/tendermint/version"
-	"github.com/tendermint/tendermint/version"
 
-	"github.com/crypto-org-chain/cronos/app"
+	"github.com/crypto-org-chain/cronos/v2/app"
+)
+
+const (
+	denom        = "testdenom"
+	denomGravity = "gravity0x0000000000000000000000000000000000000000"
 )
 
 const (
@@ -61,7 +67,9 @@ func (suite *KeeperTestSuite) DoSetupTest(t *testing.T) {
 	require.NoError(t, err)
 	consAddress := sdk.ConsAddress(priv.PubKey().Address())
 
-	suite.app = app.Setup(t, sdk.AccAddress(suite.address.Bytes()).String(), true)
+	suite.app = app.Setup(t, sdk.AccAddress(suite.address.Bytes()).String(), false)
+	blockIDHash := tmhash.Sum([]byte("block_id"))
+	hash := tmhash.Sum([]byte("partset_header"))
 	suite.ctx = suite.app.NewContext(false, tmproto.Header{
 		Height:          1,
 		ChainID:         app.TestAppChainID,
@@ -71,10 +79,10 @@ func (suite *KeeperTestSuite) DoSetupTest(t *testing.T) {
 			Block: version.BlockProtocol,
 		},
 		LastBlockId: tmproto.BlockID{
-			Hash: tmhash.Sum([]byte("block_id")),
+			Hash: blockIDHash,
 			PartSetHeader: tmproto.PartSetHeader{
 				Total: 11,
-				Hash:  tmhash.Sum([]byte("partset_header")),
+				Hash:  hash,
 			},
 		},
 		AppHash:            tmhash.Sum([]byte("app")),
@@ -271,12 +279,12 @@ func (suite *KeeperTestSuite) TestOnRecvVouchers() {
 				app.MakeEncodingConfig().Codec,
 				suite.app.GetKey(types.StoreKey),
 				suite.app.GetKey(types.MemStoreKey),
-				suite.app.GetSubspace(types.ModuleName),
 				suite.app.BankKeeper,
 				keepertest.IbcKeeperMock{},
 				suite.app.GravityKeeper,
 				suite.app.EvmKeeper,
 				suite.app.AccountKeeper,
+				authtypes.NewModuleAddress(govtypes.ModuleName).String(),
 			)
 			suite.app.CronosKeeper = cronosKeeper
 
@@ -354,23 +362,10 @@ func (suite *KeeperTestSuite) TestRegisterOrUpdateTokenMapping() {
 			false,
 		},
 		{
-			"Source token, denom not match",
+			"Source token, invalid denom, error",
 			types.MsgUpdateTokenMapping{
 				Sender:   "",
-				Denom:    "cronos0xA6d4fecb1a6fb7c2ca350169a050d483bd87b883",
-				Contract: contractAddress,
-				Symbol:   "",
-				Decimal:  0,
-			},
-			func() {
-			},
-			true,
-		},
-		{
-			"Source token, denom not checksum, error",
-			types.MsgUpdateTokenMapping{
-				Sender:   "",
-				Denom:    "cronos0xf6d4fecb1a6fb7c2ca350169a050d483bd87b883",
+				Denom:    "cronos0xf6d4fecb1a6fb7c2ca350169a050d483bd87b88@",
 				Contract: contractAddress,
 				Symbol:   "",
 				Decimal:  0,
@@ -408,6 +403,7 @@ func (suite *KeeperTestSuite) TestRegisterOrUpdateTokenMapping() {
 	}
 
 	for _, tc := range testCases {
+		tc := tc
 		suite.Run(tc.name, func() {
 			suite.SetupTest() // reset
 			// Create Cronos Keeper with mock transfer keeper
@@ -415,12 +411,12 @@ func (suite *KeeperTestSuite) TestRegisterOrUpdateTokenMapping() {
 				app.MakeEncodingConfig().Codec,
 				suite.app.GetKey(types.StoreKey),
 				suite.app.GetKey(types.MemStoreKey),
-				suite.app.GetSubspace(types.ModuleName),
 				suite.app.BankKeeper,
 				keepertest.IbcKeeperMock{},
 				suite.app.GravityKeeper,
 				suite.app.EvmKeeper,
 				suite.app.AccountKeeper,
+				authtypes.NewModuleAddress(govtypes.ModuleName).String(),
 			)
 			suite.app.CronosKeeper = cronosKeeper
 

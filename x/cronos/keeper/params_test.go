@@ -3,10 +3,12 @@ package keeper_test
 import (
 	"errors"
 
-	"github.com/crypto-org-chain/cronos/app"
-	cronosmodulekeeper "github.com/crypto-org-chain/cronos/x/cronos/keeper"
-	keepertest "github.com/crypto-org-chain/cronos/x/cronos/keeper/mock"
-	"github.com/crypto-org-chain/cronos/x/cronos/types"
+	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
+	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
+	"github.com/crypto-org-chain/cronos/v2/app"
+	cronosmodulekeeper "github.com/crypto-org-chain/cronos/v2/x/cronos/keeper"
+	keepertest "github.com/crypto-org-chain/cronos/v2/x/cronos/keeper/mock"
+	"github.com/crypto-org-chain/cronos/v2/x/cronos/types"
 )
 
 func (suite *KeeperTestSuite) TestGetSourceChannelID() {
@@ -40,12 +42,12 @@ func (suite *KeeperTestSuite) TestGetSourceChannelID() {
 				app.MakeEncodingConfig().Codec,
 				suite.app.GetKey(types.StoreKey),
 				suite.app.GetKey(types.MemStoreKey),
-				suite.app.GetSubspace(types.ModuleName),
 				suite.app.BankKeeper,
 				keepertest.IbcKeeperMock{},
 				suite.app.GravityKeeper,
 				suite.app.EvmKeeper,
 				suite.app.AccountKeeper,
+				authtypes.NewModuleAddress(govtypes.ModuleName).String(),
 			)
 			suite.app.CronosKeeper = cronosKeeper
 

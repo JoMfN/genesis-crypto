@@ -3,6 +3,7 @@ name: Run Lint
 # run on every pull request and push to main The `golangci` will pass without
 # running if no *.{go, mod, sum} files have been changed.
 on:
+  merge_group:
   pull_request:
   push:
     branches:
@@ -16,23 +17,20 @@ concurrency:
 jobs:
   golangci:
     name: Run golangci-lint
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     timeout-minutes: 40
     steps:
       - uses: actions/setup-go@v3
         with:
-          go-version: "^1.20.0"
+          go-version: '^1.22.0'
       - uses: actions/checkout@v3
-      - uses: cachix/install-nix-action@v22
+      - uses: cachix/install-nix-action@v23
         with:
-          # pin to nix-2.13 to workaround compability issue of 2.14,
-          # see: https://github.com/cachix/install-nix-action/issues/161
-          install_url: https://releases.nixos.org/nix/nix-2.13.3/install
           nix_path: nixpkgs=channel:nixos-22.11
           extra_nix_config: |
             access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
       - id: changed-files
-        uses: tj-actions/changed-files@v34
+        uses: tj-actions/changed-files@v41
         with:
           files: |
             **/*.go
@@ -40,17 +38,21 @@ jobs:
             *.sum
       - name: run golangci-lint
         run: |
-          nix profile install nixpkgs#golangci-lint
+          nix profile install -f ./nix golangci-lint
           nix profile install -f ./nix rocksdb
           export PKG_CONFIG_PATH=$HOME/.nix-profile/lib/pkgconfig
           export CGO_CFLAGS="$(pkg-config --cflags rocksdb)" CGO_LDFLAGS="$(pkg-config --libs rocksdb)"
           golangci-lint version
 
           BUILD_TAGS=rocksdb,grocksdb_clean_link
-          echo "go build"
           go build -tags $BUILD_TAGS ./cmd/cronosd
-          echo "golangci-lint ."
           golangci-lint run --out-format=github-actions --path-prefix=./ --timeout 10m --build-tags $BUILD_TAGS
+          cd versiondb
+          golangci-lint run --out-format=github-actions --path-prefix=./versiondb --timeout 10m --build-tags $BUILD_TAGS
+          cd ../memiavl
+          golangci-lint run --out-format=github-actions --path-prefix=./memiavl --timeout 10m --build-tags $BUILD_TAGS
+          cd ../store
+          golangci-lint run --out-format=github-actions --path-prefix=./store --timeout 10m --build-tags $BUILD_TAGS
         # Check only if there are differences in the source code
         if: steps.changed-files.outputs.any_changed == 'true'
 
@@ -62,17 +64,14 @@ jobs:
         with:
           fetch-depth: 0
       - id: changed-files
-        uses: tj-actions/changed-files@v34
+        uses: tj-actions/changed-files@v41
         with:
           files: |
             **/poetry.lock
             **/pyproject.toml
             **/*.py
-      - uses: cachix/install-nix-action@v22
+      - uses: cachix/install-nix-action@v23
         with:
-          # pin to nix-2.13 to workaround compability issue of 2.14,
-          # see: https://github.com/cachix/install-nix-action/issues/161
-          install_url: https://releases.nixos.org/nix/nix-2.13.3/install
           nix_path: nixpkgs=channel:nixos-22.11
           extra_nix_config: |
             access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
@@ -92,16 +91,13 @@ jobs:
         with:
           fetch-depth: 0
       - id: changed-files
-        uses: tj-actions/changed-files@v34
+        uses: tj-actions/changed-files@v41
         with:
           files: |
             *.nix
             **/*.nix
-      - uses: cachix/install-nix-action@v22
+      - uses: cachix/install-nix-action@v23
         with:
-          # pin to nix-2.13 to workaround compability issue of 2.14,
-          # see: https://github.com/cachix/install-nix-action/issues/161
-          install_url: https://releases.nixos.org/nix/nix-2.13.3/install
           nix_path: nixpkgs=channel:nixos-22.11
           extra_nix_config: |
             access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}

@@ -7,35 +7,46 @@ import (
 	sdkmath "cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/ethereum/go-ethereum/common"
-	ethtypes "github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/core"
+	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/evmos/ethermint/x/evm/statedb"
 	evmtypes "github.com/evmos/ethermint/x/evm/types"
 
-	"github.com/crypto-org-chain/cronos/x/cronos/types"
+	"github.com/crypto-org-chain/cronos/v2/x/cronos/types"
 )
 
 // DefaultGasCap defines the gas limit used to run internal evm call
 const DefaultGasCap uint64 = 25000000
 
 // CallEVM execute an evm message from native module
-func (k Keeper) CallEVM(ctx sdk.Context, to *common.Address, data []byte, value *big.Int) (*ethtypes.Message, *evmtypes.MsgEthereumTxResponse, error) {
+func (k Keeper) CallEVM(ctx sdk.Context, to *common.Address, data []byte, value *big.Int, gasLimit uint64) (*core.Message, *evmtypes.MsgEthereumTxResponse, error) {
 	nonce := k.evmKeeper.GetNonce(ctx, types.EVMModuleAddress)
-	msg := ethtypes.NewMessage(
-		types.EVMModuleAddress,
-		to,
-		nonce,
-		value, // amount
-		DefaultGasCap,
-		big.NewInt(0), nil, nil, // gasPrice
-		data,
-		nil,   // accessList
-		false, // isFake
-	)
-
+	msg := core.Message{
+		From:              types.EVMModuleAddress,
+		To:                to,
+		Nonce:             nonce,
+		Value:             value, // amount
+		GasLimit:          gasLimit,
+		GasPrice:          big.NewInt(0),
+		GasFeeCap:         nil,
+		GasTipCap:         nil, // gasPrice
+		Data:              data,
+		AccessList:        nil,   // accessList
+		SkipAccountChecks: false, // isFake
+	}
 	ret, err := k.evmKeeper.ApplyMessage(ctx, msg, nil, true)
 	if err != nil {
 		return nil, nil, err
 	}
+
+	// if the call is from an precompiled contract call, then re-emit the logs into the original stateDB.
+	if stateDB, ok := ctx.Value(statedb.StateDBContextKey).(vm.StateDB); ok {
+		for _, l := range ret.Logs {
+			stateDB.AddLog(l.ToEthereum())
+		}
+	}
+
 	return &msg, ret, nil
 }
 
@@ -45,7 +56,7 @@ func (k Keeper) CallModuleCRC21(ctx sdk.Context, contract common.Address, method
 	if err != nil {
 		return nil, err
 	}
-	_, res, err := k.CallEVM(ctx, &contract, data, big.NewInt(0))
+	_, res, err := k.CallEVM(ctx, &contract, data, big.NewInt(0), DefaultGasCap)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +75,7 @@ func (k Keeper) DeployModuleCRC21(ctx sdk.Context, denom string) (common.Address
 	data := types.ModuleCRC21Contract.Bin
 	data = append(data, ctor...)
 
-	msg, res, err := k.CallEVM(ctx, nil, data, big.NewInt(0))
+	msg, res, err := k.CallEVM(ctx, nil, data, big.NewInt(0), DefaultGasCap)
 	if err != nil {
 		return common.Address{}, err
 	}
@@ -72,7 +83,7 @@ func (k Keeper) DeployModuleCRC21(ctx sdk.Context, denom string) (common.Address
 	if res.Failed() {
 		return common.Address{}, fmt.Errorf("contract deploy failed: %s", res.Ret)
 	}
-	return crypto.CreateAddress(types.EVMModuleAddress, msg.Nonce()), nil
+	return crypto.CreateAddress(types.EVMModuleAddress, msg.Nonce), nil
 }
 
 // ConvertCoinFromNativeToCRC21 convert native token to erc20 token

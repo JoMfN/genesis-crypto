@@ -1,5 +1,9 @@
 package types
 
+import (
+	sdk "github.com/cosmos/cosmos-sdk/types"
+)
+
 const (
 	// ModuleName defines the module name
 	ModuleName = "cronos"
@@ -9,9 +13,6 @@ const (
 
 	// RouterKey is the message route for slashing
 	RouterKey = ModuleName
-
-	// QuerierRoute defines the module's query routing key
-	QuerierRoute = ModuleName
 
 	// MemStoreKey defines the in-memory store key
 	MemStoreKey = "mem_cronos"
@@ -24,6 +25,8 @@ const (
 	prefixDenomToExternalContract = iota + 1
 	prefixDenomToAutoContract
 	prefixContractToDenom
+	paramsKey
+	prefixAdminToPermissions
 )
 
 // KVStore key prefixes
@@ -31,6 +34,9 @@ var (
 	KeyPrefixDenomToExternalContract = []byte{prefixDenomToExternalContract}
 	KeyPrefixDenomToAutoContract     = []byte{prefixDenomToAutoContract}
 	KeyPrefixContractToDenom         = []byte{prefixContractToDenom}
+	// ParamsKey is the key for params.
+	ParamsKey                   = []byte{paramsKey}
+	KeyPrefixAdminToPermissions = []byte{prefixAdminToPermissions}
 )
 
 // this line is used by starport scaffolding # ibc/keys/port
@@ -48,4 +54,9 @@ func DenomToAutoContractKey(denom string) []byte {
 // ContractToDenomKey defines the store key for contract to denom reverse index
 func ContractToDenomKey(contract []byte) []byte {
 	return append(KeyPrefixContractToDenom, contract...)
+}
+
+// AdminToPermissionsKey defines the store key for admin to permissions mapping
+func AdminToPermissionsKey(address sdk.AccAddress) []byte {
+	return append(KeyPrefixAdminToPermissions, address.Bytes()...)
 }

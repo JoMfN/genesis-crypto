@@ -6,11 +6,11 @@ from pathlib import Path
 
 import tomlkit
 import web3
-from pystarport import ports
-from web3.middleware import geth_poa_middleware
+from pystarport import cluster, ports
+from web3.middleware import ExtraDataToPOAMiddleware
 
 from .cosmoscli import CosmosCLI
-from .utils import supervisorctl, wait_for_port
+from .utils import supervisorctl, w3_wait_for_block, wait_for_port
 
 
 class Cronos:
@@ -43,7 +43,9 @@ class Cronos:
 
     def node_w3(self, i=0):
         if self._use_websockets:
-            return web3.Web3(web3.providers.WebsocketProvider(self.w3_ws_endpoint(i)))
+            return web3.Web3(
+                web3.providers.LegacyWebSocketProvider(self.w3_ws_endpoint(i))
+            )
         else:
             return web3.Web3(web3.providers.HTTPProvider(self.w3_http_endpoint(i)))
 
@@ -103,15 +105,6 @@ def setup_cronos(path, base_port, enable_auto_deployment=True):
     yield from setup_custom_cronos(path, base_port, cfg)
 
 
-def setup_cronos_experimental(path, base_port, enable_auto_deployment=True):
-    cfg = Path(__file__).parent / (
-        "configs/cronos-experimental-devnet.jsonnet"
-        if enable_auto_deployment
-        else "configs/disable_auto_deployment.jsonnet"
-    )
-    yield from setup_custom_cronos(path, base_port, cfg)
-
-
 def setup_geth(path, base_port):
     with (path / "geth.log").open("w") as logfile:
         cmd = [
@@ -121,6 +114,10 @@ def setup_geth(path, base_port):
             str(base_port),
             "--port",
             str(base_port + 1),
+            "--networkid",
+            str(15),
+            "--miner.etherbase",
+            "0x57f96e6B86CdeFdB3d412547816a82E3E0EbF9D2",
         ]
         print(*cmd)
         proc = subprocess.Popen(
@@ -132,10 +129,13 @@ def setup_geth(path, base_port):
         try:
             wait_for_port(base_port)
             w3 = web3.Web3(web3.providers.HTTPProvider(f"http://127.0.0.1:{base_port}"))
-            w3.middleware_onion.inject(geth_poa_middleware, layer=0)
+            w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
             yield Geth(w3)
         finally:
-            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            except ProcessLookupError:
+                pass
             # proc.terminate()
             proc.wait()
 
@@ -152,7 +152,15 @@ class GravityBridge:
         self.contract = contract
 
 
-def setup_custom_cronos(path, base_port, config, post_init=None, chain_binary=None):
+def setup_custom_cronos(
+    path,
+    base_port,
+    config,
+    post_init=None,
+    chain_binary=None,
+    wait_port=True,
+    relayer=cluster.Relayer.HERMES.value,
+):
     cmd = [
         "pystarport",
         "init",
@@ -164,6 +172,8 @@ def setup_custom_cronos(path, base_port, config, post_init=None, chain_binary=No
         str(base_port),
         "--no_remove",
     ]
+    if relayer == cluster.Relayer.RLY.value:
+        cmd = cmd + ["--relayer", str(relayer)]
     if chain_binary is not None:
         cmd = cmd[:1] + ["--cmd", chain_binary] + cmd[1:]
     print(*cmd)
@@ -175,9 +185,12 @@ def setup_custom_cronos(path, base_port, config, post_init=None, chain_binary=No
         preexec_fn=os.setsid,
     )
     try:
-        wait_for_port(ports.evmrpc_port(base_port))
-        wait_for_port(ports.evmrpc_ws_port(base_port))
-        yield Cronos(path / "cronos_777-1", chain_binary=chain_binary or "genesisd")
+        if wait_port:
+            wait_for_port(ports.evmrpc_port(base_port))
+            wait_for_port(ports.evmrpc_ws_port(base_port))
+        c = Cronos(path / "cronos_777-1", chain_binary=chain_binary or "genesisd")
+        w3_wait_for_block(c.w3, 1)
+        yield c
     finally:
         os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
         # proc.terminate()

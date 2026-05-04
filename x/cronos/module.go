@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math/rand"
 
 	// this line is used by starport scaffolding # 1
 
@@ -12,7 +11,7 @@ import (
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/spf13/cobra"
 
-	abci "github.com/tendermint/tendermint/abci/types"
+	abci "github.com/cometbft/cometbft/abci/types"
 
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/codec"
@@ -20,10 +19,11 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/module"
 	simtypes "github.com/cosmos/cosmos-sdk/types/simulation"
-	"github.com/crypto-org-chain/cronos/x/cronos/client/cli"
-	"github.com/crypto-org-chain/cronos/x/cronos/keeper"
-	"github.com/crypto-org-chain/cronos/x/cronos/simulation"
-	"github.com/crypto-org-chain/cronos/x/cronos/types"
+	paramstypes "github.com/cosmos/cosmos-sdk/x/params/types"
+	"github.com/crypto-org-chain/cronos/v2/x/cronos/client/cli"
+	"github.com/crypto-org-chain/cronos/v2/x/cronos/keeper"
+	"github.com/crypto-org-chain/cronos/v2/x/cronos/simulation"
+	"github.com/crypto-org-chain/cronos/v2/x/cronos/types"
 	// this line is used by starport scaffolding # ibc/module/import
 )
 
@@ -34,7 +34,7 @@ var (
 )
 
 const (
-	ExperimentalFlag = "unsafe-experimental"
+	ConsensusVersion = 2
 )
 
 // ----------------------------------------------------------------------------
@@ -50,7 +50,6 @@ func NewAppModuleBasic() AppModuleBasic {
 
 // AddModuleInitFlags implements servertypes.ModuleInitFlags interface.
 func AddModuleInitFlags(startCmd *cobra.Command) {
-	startCmd.Flags().Bool(ExperimentalFlag, false, "Start the node with experimental features")
 }
 
 // Name returns the capability module's name.
@@ -114,17 +113,19 @@ func (AppModuleBasic) GetQueryCmd() *cobra.Command {
 // AppModule implements the AppModule interface for the capability module.
 type AppModule struct {
 	AppModuleBasic
-	keeper        keeper.Keeper
-	accountKeeper types.AccountKeeper
-	bankKeeper    types.BankKeeper
+	keeper         keeper.Keeper
+	accountKeeper  types.AccountKeeper
+	bankKeeper     types.BankKeeper
+	legacySubspace paramstypes.Subspace
 }
 
-func NewAppModule(keeper keeper.Keeper, ak types.AccountKeeper, bk types.BankKeeper) AppModule {
+func NewAppModule(keeper keeper.Keeper, ak types.AccountKeeper, bk types.BankKeeper, ls paramstypes.Subspace) AppModule {
 	return AppModule{
 		AppModuleBasic: NewAppModuleBasic(),
 		keeper:         keeper,
 		accountKeeper:  ak,
 		bankKeeper:     bk,
+		legacySubspace: ls,
 	}
 }
 
@@ -133,23 +134,16 @@ func (am AppModule) Name() string {
 	return am.AppModuleBasic.Name()
 }
 
-// Route returns the capability module's message routing key.
-func (am AppModule) Route() sdk.Route {
-	return sdk.NewRoute(types.RouterKey, NewHandler(am.keeper))
-}
-
-// QuerierRoute returns the capability module's query routing key.
-func (AppModule) QuerierRoute() string { return types.QuerierRoute }
-
-// LegacyQuerierHandler returns the capability module's Querier.
-func (am AppModule) LegacyQuerierHandler(legacyQuerierCdc *codec.LegacyAmino) sdk.Querier {
-	return nil
-}
-
 // RegisterServices registers a GRPC query service to respond to the
 // module-specific GRPC queries.
 func (am AppModule) RegisterServices(cfg module.Configurator) {
 	types.RegisterQueryServer(cfg.QueryServer(), am.keeper)
+	types.RegisterMsgServer(cfg.MsgServer(), keeper.NewMsgServerImpl(am.keeper))
+
+	migrator := keeper.NewMigrator(am.keeper, am.legacySubspace)
+	if err := cfg.RegisterMigration(types.ModuleName, 1, migrator.Migrate1to2); err != nil {
+		panic(err)
+	}
 }
 
 // RegisterInvariants registers the capability module's invariants.
@@ -174,7 +168,7 @@ func (am AppModule) ExportGenesis(ctx sdk.Context, cdc codec.JSONCodec) json.Raw
 }
 
 // ConsensusVersion implements AppModule/ConsensusVersion.
-func (AppModule) ConsensusVersion() uint64 { return 1 }
+func (AppModule) ConsensusVersion() uint64 { return ConsensusVersion }
 
 // BeginBlock executes all ABCI BeginBlock logic respective to the capability module.
 func (am AppModule) BeginBlock(_ sdk.Context, _ abci.RequestBeginBlock) {}
@@ -185,19 +179,9 @@ func (am AppModule) EndBlock(_ sdk.Context, _ abci.RequestEndBlock) []abci.Valid
 	return []abci.ValidatorUpdate{}
 }
 
-// RandomizedParams creates randomized cronos param changes for the simulator.
-func (AppModule) RandomizedParams(r *rand.Rand) []simtypes.ParamChange {
-	return nil
-}
-
 // RegisterStoreDecoder registers a decoder for cronos module's types
 func (am AppModule) RegisterStoreDecoder(sdr sdk.StoreDecoderRegistry) {
 	sdr[types.StoreKey] = simulation.NewDecodeStore()
-}
-
-// ProposalContents doesn't return any content functions for governance proposals.
-func (AppModule) ProposalContents(simState module.SimulationState) []simtypes.WeightedProposalContent {
-	return nil
 }
 
 // GenerateGenesisState creates a randomized GenState of the cronos module.

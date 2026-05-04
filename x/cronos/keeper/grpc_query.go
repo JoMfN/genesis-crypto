@@ -5,9 +5,14 @@ import (
 	"fmt"
 	"math/big"
 
+	errorsmod "cosmossdk.io/errors"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	"github.com/crypto-org-chain/cronos/x/cronos/types"
+	"github.com/crypto-org-chain/cronos/v2/x/cronos/types"
 	"github.com/ethereum/go-ethereum/common"
+	evmkeeper "github.com/evmos/ethermint/x/evm/keeper"
 	evmtypes "github.com/evmos/ethermint/x/evm/types"
 )
 
@@ -62,8 +67,9 @@ func (k Keeper) ReplayBlock(goCtx context.Context, req *types.ReplayBlockRequest
 	blockHeight := big.NewInt(req.BlockNumber)
 	homestead := ethCfg.IsHomestead(blockHeight)
 	istanbul := ethCfg.IsIstanbul(blockHeight)
-	london := ethCfg.IsLondon(blockHeight)
+	shanghai := ethCfg.IsShanghai(uint64(req.BlockTime.Unix()))
 	evmDenom := params.EvmDenom
+	baseFee := k.evmKeeper.GetBaseFee(ctx, ethCfg)
 
 	// we assume the message executions are successful, they are filtered in json-rpc api
 	for _, msg := range req.Msgs {
@@ -74,19 +80,14 @@ func (k Keeper) ReplayBlock(goCtx context.Context, req *types.ReplayBlockRequest
 		}
 
 		// populate the `From` field
-		if _, err := msg.GetSender(chainID); err != nil {
+		if _, err := msg.GetSenderLegacy(chainID); err != nil {
 			return nil, err
 		}
-
-		if _, _, err := k.evmKeeper.DeductTxCostsFromUserBalance(
-			ctx,
-			*msg,
-			txData,
-			evmDenom,
-			homestead,
-			istanbul,
-			london,
-		); err != nil {
+		fees, err := evmkeeper.VerifyFee(txData, evmDenom, baseFee, homestead, istanbul, shanghai, ctx.IsCheckTx())
+		if err != nil {
+			return nil, errorsmod.Wrapf(err, "failed to verify the fees")
+		}
+		if err := k.evmKeeper.DeductTxCostsFromUserBalance(ctx, fees, common.BytesToAddress(msg.From)); err != nil {
 			return nil, err
 		}
 
@@ -108,5 +109,40 @@ func (k Keeper) ReplayBlock(goCtx context.Context, req *types.ReplayBlockRequest
 	}
 	return &types.ReplayBlockResponse{
 		Responses: rsps,
+	}, nil
+}
+
+// Params returns parameters of cronos module
+func (k Keeper) Params(goCtx context.Context, req *types.QueryParamsRequest) (*types.QueryParamsResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "empty request")
+	}
+	ctx := sdk.UnwrapSDKContext(goCtx)
+	params := k.GetParams(ctx)
+
+	return &types.QueryParamsResponse{Params: params}, nil
+}
+
+// Permissions returns the permissions of a specific account
+func (k Keeper) Permissions(goCtx context.Context, req *types.QueryPermissionsRequest) (*types.QueryPermissionsResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "empty request")
+	}
+	ctx := sdk.UnwrapSDKContext(goCtx)
+	acc, err := sdk.AccAddressFromBech32(req.Address)
+	if err != nil {
+		return nil, err
+	}
+	admin := k.GetParams(ctx).CronosAdmin
+	if admin == acc.String() {
+		return &types.QueryPermissionsResponse{
+			CanChangeTokenMapping: true,
+			CanTurnBridge:         true,
+		}, nil
+	}
+	permissions := k.GetPermissions(ctx, acc)
+	return &types.QueryPermissionsResponse{
+		CanChangeTokenMapping: CanChangeTokenMapping == (permissions & CanChangeTokenMapping),
+		CanTurnBridge:         CanTurnBridge == (permissions & CanTurnBridge),
 	}, nil
 }

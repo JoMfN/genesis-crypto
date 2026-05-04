@@ -7,12 +7,23 @@ config {
     key_name: 'signer1',
     accounts: super.accounts[:std.length(super.accounts) - 1] + [super.accounts[std.length(super.accounts) - 1] {
       coins: super.coins + ',100000000000ibcfee',
-    }],
+    }] + [
+      {
+        name: 'user' + i,
+        coins: '30000000000000000000000basetcro',
+      }
+      for i in std.range(1, 50)
+    ],
     'app-config'+: {
       'index-events': super['index-events'] + ['message.action'],
     },
     genesis+: {
       app_state+: {
+        cronos+: {
+          params+: {
+            max_callback_gas: 50000,
+          },
+        },
         feemarket+: {
           params+: {
             no_base_fee: true,
@@ -26,8 +37,9 @@ config {
     cmd: 'chain-maind',
     'start-flags': '--trace',
     'account-prefix': 'cro',
+    'coin-type': 394,
     'app-config': {
-      'minimum-gas-prices': '500basecro',
+      'minimum-gas-prices': '0basecro',
     },
     validators: [
       {
@@ -56,9 +68,15 @@ config {
       },
       {
         name: 'signer2',
-        coins: '10000000000000cro',
+        coins: '10000000000000cro,100000000000ibcfee',
         mnemonic: '${SIGNER2_MNEMONIC}',
       },
+    ] + [
+      {
+        name: 'user' + i,
+        coins: '10000000000000cro',
+      }
+      for i in std.range(1, 50)
     ],
     genesis: {
       app_state: {
@@ -92,6 +110,8 @@ config {
             params: {
               allow_messages: [
                 '/cosmos.bank.v1beta1.MsgSend',
+                '/cosmos.staking.v1beta1.MsgDelegate',
+                '/ibc.applications.interchain_accounts.host.v1.MsgModuleQuerySafe',
               ],
             },
           },
@@ -125,8 +145,8 @@ config {
     chains: [
       {
         id: 'cronos_777-1',
-        max_gas: 500000,
-        gas_multiplier: 2,
+        max_gas: 2500000,
+        gas_multiplier: 1.1,
         address_type: {
           derivation: 'ethermint',
           proto_type: {
@@ -134,8 +154,11 @@ config {
           },
         },
         gas_price: {
-          price: 10000000000000000,
+          price: 10000000,
           denom: 'basetcro',
+        },
+        event_source: {
+          batch_delay: '5000ms',
         },
         extension_options: [{
           type: 'ethermint_dynamic_fee',
@@ -148,6 +171,9 @@ config {
         gas_price: {
           price: 1000000,
           denom: 'basecro',
+        },
+        event_source: {
+          batch_delay: '5000ms',
         },
       },
     ],

@@ -2,7 +2,6 @@ local config = import 'default.jsonnet';
 
 config {
   'cronos_777-1'+: {
-    'cmd-flags': '--unsafe-experimental',
     'start-flags': '--trace --inv-check-period 5',
     'app-config'+: {
       'minimum-gas-prices':: super['minimum-gas-prices'],
@@ -16,7 +15,7 @@ config {
       mnemonic: '${COMMUNITY_MNEMONIC}',
     }],
     genesis+: {
-      consensus_params:: super['consensus_params'],
+      consensus:: super['consensus'],
       app_state+: {
         evm+: {
           accounts: [
@@ -56,6 +55,10 @@ config {
             {
               denom: 'gravity0x0000000000000000000000000000000000000000',
               contract: '0x68542BD12B41F5D51D6282Ec7D91D7d0D78E4503',
+            },
+            {
+              denom: 'ibc/6B5A664BF0AF4F71B2F0BAA33141E2F1321242FBD5D19762F541EC971ACB0865',
+              contract: '0x0000000000000000000000000000000000000000',
             },
           ],
           auto_contracts: [

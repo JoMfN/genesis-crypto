@@ -16,10 +16,10 @@ for dir in $proto_dirs; do
   fi
 done
 
-cd ../third_party/proto
 echo "Generate cosmos swagger files"
 
-proto_dirs=$(find ./cosmos ./ethermint ./ibc -path -prune -o -name '*.proto' -print0 | xargs -0 -n1 dirname | sort | uniq)
+proto_dir="../third_party/proto"
+proto_dirs=$(find "${proto_dir}/ethermint" "${proto_dir}/ibc" -path -prune -o -name '*.proto' -print0 | xargs -0 -n1 dirname | sort | uniq)
 for dir in $proto_dirs; do
   # generate swagger files (filter query files)
   query_file=$(find "${dir}" -maxdepth 1 \( -name 'query.proto' -o -name 'service.proto' \))
@@ -29,7 +29,9 @@ for dir in $proto_dirs; do
   fi
 done
 
-cd ../..
+buf generate --template buf.gen.swagger.yaml "buf.build/cosmos/cosmos-sdk:954f7b05f38440fc8250134b15adec47"
+
+cd ..
 
 echo "Combine swagger files"
 # combine swagger files
@@ -39,12 +41,3 @@ swagger-combine ./client/docs/config.json -o ./client/docs/swagger-ui/swagger.ya
 
 # clean swagger files
 rm -rf ./tmp-swagger-gen
-
-echo "Update statik data"
-install_statik() {
-  go install github.com/rakyll/statik@v0.1.7
-}
-install_statik
-
-# generate binary for static server
-statik -src=./client/docs/swagger-ui -dest=./client/docs -f -ns cronos

@@ -2,7 +2,6 @@ local config = import 'default.jsonnet';
 
 config {
   'cronos_777-1'+: {
-    'cmd-flags': '--unsafe-experimental',
     'start-flags': '--trace --inv-check-period 5',
     'app-config'+: {
       'minimum-gas-prices':: super['minimum-gas-prices'],
@@ -16,7 +15,6 @@ config {
       mnemonic: '${COMMUNITY_MNEMONIC}',
     }],
     genesis+: {
-      consensus_params:: super['consensus_params'],
       app_state+: {
         cronos: {
           params: {
@@ -25,6 +23,13 @@ config {
           },
         },
         transfer:: super['transfer'],
+      },
+      consensus+: {
+        params+: {
+          block+: {
+            time_iota_ms: '2000',
+          },
+        },
       },
     },
   },
