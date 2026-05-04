@@ -40,8 +40,8 @@ import (
 	ethermint "github.com/evmos/ethermint/types"
 
 	"github.com/crypto-org-chain/cronos/app"
-	"github.com/crypto-org-chain/cronos/cmd/genesisd/experimental"
-	"github.com/crypto-org-chain/cronos/cmd/genesisd/opendb"
+	"github.com/crypto-org-chain/cronos/cmd/cronosd/experimental"
+	"github.com/crypto-org-chain/cronos/cmd/cronosd/opendb"
 	memiavlcfg "github.com/crypto-org-chain/cronos/store/config"
 	"github.com/crypto-org-chain/cronos/x/cronos"
 	// this line is used by starport scaffolding # stargate/root/import

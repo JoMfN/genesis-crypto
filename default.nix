@@ -37,7 +37,7 @@ buildGoApplication rec {
   ] ./.);
   modules = ./gomod2nix.toml;
   pwd = src; # needed to support replace
-  subPackages = [ "cmd/genesisd" ];
+  subPackages = [ "cmd/cronosd" ];
   CGO_ENABLED = "1";
   CGO_LDFLAGS =
     if static then "-lrocksdb -pthread -lstdc++ -ldl -lzstd -lsnappy -llz4 -lbz2 -lz"

@@ -92,10 +92,10 @@ endif
 
 all: build
 build: check-network print-ledger go.sum
-	@go build -mod=readonly $(BUILD_FLAGS) -o $(BUILDDIR)/$(BINARY_NAME) ./cmd/$(BINARY_NAME)
+	@go build -mod=readonly $(BUILD_FLAGS) -o $(BUILDDIR)/$(BINARY_NAME) ./cmd/cronosd
 
 install: check-network print-ledger go.sum
-	@go install -mod=readonly $(BUILD_FLAGS) ./cmd/$(BINARY_NAME)
+	@go install -mod=readonly $(BUILD_FLAGS) ./cmd/cronosd
 
 test:
 	@go test -v -mod=readonly $(PACKAGES) -coverprofile=$(COVERAGE) -covermode=atomic

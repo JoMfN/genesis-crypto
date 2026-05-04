@@ -5,7 +5,7 @@ import (
 
 	svrcmd "github.com/cosmos/cosmos-sdk/server/cmd"
 	"github.com/crypto-org-chain/cronos/app"
-	"github.com/crypto-org-chain/cronos/cmd/genesisd/cmd"
+	"github.com/crypto-org-chain/cronos/cmd/cronosd/cmd"
 )
 
 func main() {
