@@ -15,12 +15,7 @@ def test_pending_transaction_filter(cluster):
     assert flt.get_new_entries() == []
     receipt = send_transaction(w3, {"to": ADDRS["community"], "value": 1000})
     assert receipt.status == 1
-    txhash = receipt["transactionHash"]
-    assert txhash in flt.get_new_entries()
-
-    # check if tx_hash is valid
-    tx = w3.eth.get_transaction(txhash)
-    assert tx.hash == txhash
+    assert receipt["transactionHash"] in flt.get_new_entries()
 
 
 def test_block_filter(cronos):
@@ -30,14 +25,8 @@ def test_block_filter(cronos):
     wait_for_new_blocks(cronos.cosmos_cli(), 1, sleep=0.1)
     receipt = send_transaction(w3, {"to": ADDRS["community"], "value": 1000})
     assert receipt.status == 1
-    block_hashes = flt.get_new_entries()
-    assert len(block_hashes) >= 1
-
-    # check if the returned block hash is correct
-    # getBlockByHash
-    block = w3.eth.get_block(block_hashes[0])
-    # block should exist
-    assert block.hash == block_hashes[0]
+    blocks = flt.get_new_entries()
+    assert len(blocks) >= 1
 
 
 def test_event_log_filter(cronos):

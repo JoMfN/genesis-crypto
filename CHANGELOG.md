@@ -1,6 +1,6 @@
 # Changelog
 
-_March 26, 2024_
+*March 26, 2024*
 
 ## v1.1.1
 
@@ -8,7 +8,7 @@ _March 26, 2024_
 
 - [#1362](https://github.com/crypto-org-chain/cronos/pull/1362) Log blacklist addresses.
 
-_March 19, 2024_
+*March 19, 2024*
 
 ## v1.1.0
 
@@ -16,7 +16,7 @@ _March 19, 2024_
 
 - [#1336](https://github.com/crypto-org-chain/cronos/pull/1336) Update ethermint to develop to fix feeHistory rpc api.
 
-_February 28, 2024_
+*February 28, 2024*
 
 ## v1.1.0-rc5
 
@@ -24,7 +24,7 @@ _February 28, 2024_
 
 - [#1329](https://github.com/crypto-org-chain/cronos/pull/1329) Update cosmos-sdk to `v0.47.10`.
 
-_February 19, 2024_
+*February 19, 2024*
 
 ## v1.1.0-rc4
 
@@ -38,7 +38,7 @@ _February 19, 2024_
 
 - [#1324](https://github.com/crypto-org-chain/cronos/pull/1324) Update cosmos-sdk to `v0.47.9`.
 
-_February 5, 2024_
+*February 5, 2024*
 
 ## v1.1.0-rc3
 
@@ -56,7 +56,7 @@ _February 5, 2024_
 - [#1291](https://github.com/crypto-org-chain/cronos/pull/1291) Update ibc-go to v7.3.2.
 - [#1309](https://github.com/crypto-org-chain/cronos/pull/1309) Add missing destroy for file lock and close map on error.
 
-_January 5, 2024_
+*January 5, 2024*
 
 ## v1.1.0-rc2
 
@@ -90,7 +90,7 @@ _January 5, 2024_
 - [#1241](https://github.com/crypto-org-chain/cronos/pull/1241) Improve parallelization of memiavl restoration.
 - (deps) [#1253](https://github.com/crypto-org-chain/cronos/pull/1253) Upgrade Go-Ethereum version to [`v1.11.6`](https://github.com/ethereum/go-ethereum/releases/tag/v1.11.6).
 
-_October 17, 2023_
+*October 17, 2023*
 
 ## v1.1.0-rc1
 
@@ -103,7 +103,7 @@ _October 17, 2023_
 
 - [#1197](https://github.com/crypto-org-chain/cronos/pull/1197) tune rocksdb options to control memory consumption.
 
-_October 9, 2023_
+*October 9, 2023*
 
 ## v1.1.0-rc0
 
@@ -193,7 +193,7 @@ _October 9, 2023_
 - [#1182](https://github.com/crypto-org-chain/cronos/pull/1182) Bump librocksdb to 8.5.3.
 - [#1183](https://github.com/crypto-org-chain/cronos/pull/1183) Avoid redundant logs added from relayer.
 
-_April 13, 2023_
+*April 13, 2023*
 
 ## v1.0.7
 
@@ -213,7 +213,7 @@ _April 13, 2023_
     - <https://github.com/cosmos/cosmos-sdk/pull/15667>
 - [#945](https://github.com/crypto-org-chain/cronos/pull/945) Fix no handler exists for proposal type error when update-client due to wrong ibc route.
 
-_Mar 16, 2023_
+*Mar 16, 2023*
 
 ## v1.0.6
 
@@ -221,7 +221,7 @@ _Mar 16, 2023_
 
 - [#932](https://github.com/crypto-org-chain/cronos/pull/932) Backport multiple json-rpc bug fixes in ethermint ([commits](https://github.com/crypto-org-chain/ethermint/compare/v0.20.8-cronos...v0.20.9-cronos)).
 
-_Mar 6, 2023_
+*Mar 6, 2023*
 
 ## v1.0.5
 
@@ -235,7 +235,7 @@ _Mar 6, 2023_
 - [#907](https://github.com/crypto-org-chain/cronos/pull/907) Apply a configurable limit in rpc apis.
 - [#909](https://github.com/crypto-org-chain/cronos/pull/909) Update to cosmos-sdk v0.46.11.
 
-_Feb 15, 2023_
+*Feb 15, 2023*
 
 ## v1.0.4
 
@@ -249,7 +249,7 @@ _Feb 15, 2023_
 - [#791](https://github.com/crypto-org-chain/cronos/pull/791) Implement versiondb and migration commands.
 - [#779](https://github.com/crypto-org-chain/cronos/pull/779) Add config iavl-lazy-loading to enable lazy loading of iavl store.
 
-_Feb 08, 2023_
+*Feb 08, 2023*
 
 ## v1.0.3
 
@@ -257,7 +257,7 @@ _Feb 08, 2023_
 
 - [#846](https://github.com/crypto-org-chain/cronos/pull/846) Disable authz message
 
-_Jan 04, 2023_
+*Jan 04, 2023*
 
 ## v1.0.2
 
@@ -265,7 +265,7 @@ _Jan 04, 2023_
 
 - [#802](https://github.com/crypto-org-chain/cronos/pull/802) Update ibc-go to `v5.2.0`.
 
-_December 14, 2022_
+*December 14, 2022*
 
 ## v1.0.1
 
@@ -275,7 +275,7 @@ _December 14, 2022_
 - [#790](https://github.com/crypto-org-chain/cronos/pull/790) Update cosmos-sdk to `v0.46.7`, it fix a migration issue which affects pending proposals's votes during upgrade,
   it also adds the config entries for file streamer.
 
-_Nov 22, 2022_
+*Nov 22, 2022*
 
 ## v1.0.0
 
@@ -283,7 +283,7 @@ _Nov 22, 2022_
 
 - [#772](https://github.com/crypto-org-chain/cronos/pull/772) Update cosmos-sdk to `v0.46.6`, it's non-breaking for cronos.
 
-_Nov 17, 2022_
+*Nov 17, 2022*
 
 ## v1.0.0-rc4
 
@@ -291,7 +291,7 @@ _Nov 17, 2022_
 
 - [#771](https://github.com/crypto-org-chain/cronos/pull/771) Fix london hardfork number in testnet3 parameters.
 
-_Nov 13, 2022_
+*Nov 13, 2022*
 
 ## v1.0.0-rc3
 
@@ -299,7 +299,7 @@ _Nov 13, 2022_
 
 - [#765](https://github.com/crypto-org-chain/cronos/pull/765) Upgrade ibc-go to [v5.1.0](https://github.com/cosmos/ibc-go/releases/tag/v5.1.0) and related dependencies.
 
-_Nov 10, 2022_
+*Nov 10, 2022*
 
 ## v1.0.0-rc2
 
@@ -310,7 +310,7 @@ _Nov 10, 2022_
 - [#763](https://github.com/crypto-org-chain/cronos/pull/763) Add error log for iavl set error.
 - [#764](https://github.com/crypto-org-chain/cronos/pull/764) Make `eth_getProof` result compatible with ethereum.
 
-_Nov 4, 2022_
+*Nov 4, 2022*
 
 ## v1.0.0-rc1
 
@@ -318,7 +318,7 @@ _Nov 4, 2022_
 
 - [#760](https://github.com/crypto-org-chain/cronos/pull/760) Revert breaking changes on gas used in Ethermint.
 
-_Nov 1, 2022_
+*Nov 1, 2022*
 
 ## v1.0.0-rc0
 
@@ -327,7 +327,7 @@ _Nov 1, 2022_
 - [#748](https://github.com/crypto-org-chain/cronos/pull/748) Fix inconsistent state if upgrade migration commit is interrupted.
 - [#752](https://github.com/crypto-org-chain/cronos/pull/752) Update iavl to `v0.19.4`.
 
-_Oct 15, 2022_
+*Oct 15, 2022*
 
 ## v0.9.0-beta4
 
@@ -341,7 +341,7 @@ _Oct 15, 2022_
 - [cronos#721](https://github.com/crypto-org-chain/cronos/pull/721) Integrate the file state streamer (backport #702).
 - [cronos#730](https://github.com/crypto-org-chain/cronos/pull/730) Update dependencies to recent versions (backport #729).
 
-_Sep 20, 2022_
+*Sep 20, 2022*
 
 ## v0.9.0-beta3
 
@@ -349,11 +349,11 @@ _Sep 20, 2022_
 
 - [cronos#696](https://github.com/crypto-org-chain/cronos/pull/696) Fix json-rpc apis for legacy blocks.
 
-_Aug 29, 2022_
+*Aug 29, 2022*
 
 ## v0.9.0-beta2
 
-_September 13, 2022_
+*September 13, 2022*
 
 ## v0.9.0
 
@@ -382,7 +382,7 @@ _September 13, 2022_
 - [cronos#549](https://github.com/crypto-org-chain/cronos/pull/549) Use custom tx indexer feature of ethermint.
 - [cronos#673](https://github.com/crypto-org-chain/cronos/pull/673) Upgrade cosmos-sdk to 0.46.1 and ibc-go to v5.0.0-rc0.
 
-_Aug 5, 2022_
+*Aug 5, 2022*
 
 ## v0.8.0
 
@@ -390,7 +390,7 @@ _Aug 5, 2022_
 
 - [cronos#618](https://github.com/crypto-org-chain/cronos/pull/618) selfdestruct don't delete bytecode of smart contract.
 
-_Aug 5, 2022_
+*Aug 5, 2022*
 
 ## v0.7.1
 
@@ -410,7 +410,7 @@ _Aug 5, 2022_
 - [cronos#522](https://github.com/crypto-org-chain/cronos/pull/522) Add `reindex-duplicated-tx` command to handle the tendermint tx duplicated issue.
 - [cronos#585](https://github.com/crypto-org-chain/cronos/pull/585) Reject replay unprotected tx, mainly the old transactions on ethereum.
 
-_May 3, 2022_
+*May 3, 2022*
 
 ## v0.7.0
 
@@ -448,7 +448,7 @@ _May 3, 2022_
 - [cronos#378](https://github.com/crypto-org-chain/cronos/pull/378) Backport recent ethermint bug fixes: a) fix tx inclusion issue by report correct gasWanted of eth tx, b) Add buffer to eth_gasPrice response to fix client UX, c) Quick fix for eth_feeHistory when reward is nil, d) add returnValue message on tracing.
 - [cronos#446](https://github.com/crypto-org-chain/cronos/pull/446) Fix failure of query legacy block after upgrade.
 
-_December 10, 2021_
+*December 10, 2021*
 
 ## v0.6.5
 
@@ -457,7 +457,7 @@ _December 10, 2021_
 - [cronos#255](https://github.com/crypto-org-chain/cronos/pull/255) fix empty topics in non-breaking way
 - [cronos#270](https://github.com/crypto-org-chain/cronos/pull/270) reject MsgEthereumTx wrapping tx without the extension option.
 
-_November 30, 2021_
+*November 30, 2021*
 
 ## v0.6.4
 
@@ -465,7 +465,7 @@ _November 30, 2021_
 
 - [crypto-org-chain/ethermint#19](https://github.com/crypto-org-chain/ethermint/pull/19) revert tharsis#786 because it contains consensus breaking changes
 
-_November 29, 2021_
+*November 29, 2021*
 
 ## v0.6.3
 
@@ -480,19 +480,19 @@ _November 29, 2021_
 - [tharsis#786](https://github.com/tharsis/ethermint/pull/786) Improve error message of `SendTransaction`/`SendRawTransaction` JSON-RPC APIs.
 - [cronos#222](https://github.com/crypto-org-chain/cronos/pull/222) change solc 0.6.11 to 0.6.8 (from dapp cachix) and update hermes to 0.8.
 
-_November 19, 2021_
+*November 19, 2021*
 
 ## v0.6.2
 
 ### Bug Fixes
 
 - [tharsis#720](https://github.com/tharsis/ethermint/pull/720) traceTransaction fails for succesful tx
-- [tharsis#743](https://github.com/tharsis/ethermint/pull/743) missing debug_tranceBlockByHash RPC method and fix debug_traceBlock\*
+- [tharsis#743](https://github.com/tharsis/ethermint/pull/743) missing debug_tranceBlockByHash RPC method and fix debug_traceBlock*
 - [tharsis#746](https://github.com/tharsis/ethermint/pull/746) set debug based on tracer
 - [tharsis#741](https://github.com/tharsis/ethermint/pull/741) filter non eth txs in block rpc response
 - [crypto-org-chain/ethermint#12](https://github.com/crypto-org-chain/ethermint/pull/12) reject tx with too large gas limit
 
-_October 26, 2021_
+*October 26, 2021*
 
 ## v0.6.1
 
@@ -507,7 +507,7 @@ _October 26, 2021_
 - [cronos#179](https://github.com/crypto-org-chain/cronos/pull/179) fix denom (symbol) in CRC20Module
 - [cronos#178](https://github.com/crypto-org-chain/cronos/pull/178) version CLI command doesn't output any text
 
-_October 13, 2021_
+*October 13, 2021*
 
 ## v0.6.0
 
@@ -529,7 +529,7 @@ This version removes gravity-bridge from cronos, also includes multiple bug fixe
 - [cronos#162](https://github.com/crypto-org-chain/cronos/pull/162) bump ibc-go to v1.2.1 with hooks support
 - [cronos#169](https://github.com/crypto-org-chain/cronos/pull/169) bump ethermint to v0.7.1 and go-ethereum to v10.1.3-patched which include (CVE-2021-39137) hotfix
 
-_October 4, 2021_
+*October 4, 2021*
 
 ## v0.5.5
 
@@ -550,7 +550,7 @@ We also enable swagger doc ui and add the token mapping state in genesis.
 - [cronos#113](https://github.com/crypto-org-chain/cronos/pull/113) export token mapping state to genesis
 - [cronos#128](https://github.com/crypto-org-chain/cronos/pull/128) add native message to update token mapping
 
-_September 22, 2021_
+*September 22, 2021*
 
 ## v0.5.4
 
@@ -561,7 +561,7 @@ This version is the same as v0.5.3 with a patched version of ethermint which inc
 - [cronos#93](https://github.com/crypto-org-chain/cronos/pull/93) tx receipts don't contain events
 - [cronos#98](https://github.com/crypto-org-chain/cronos/pull/98) node crash under concurrent query
 
-_September 21, 2021_
+*September 21, 2021*
 
 ## v0.5.3
 
@@ -584,7 +584,7 @@ In addition to that, it also upgrade ethermint to its latest version (v0.5.0.x) 
 - [cronos#68](https://github.com/crypto-org-chain/cronos/issues/68) support SendCroToIbc in evm_log_handlers
 - [cronos#86](https://github.com/crypto-org-chain/cronos/issues/86) change account prefix
 
-_August 19, 2021_
+*August 19, 2021*
 
 ## v0.5.2
 
@@ -600,7 +600,7 @@ _August 19, 2021_
 
 - (ethermint) [tharsis#446](https://github.com/tharsis/ethermint/pull/446) fix chain state export issue
 
-_August 16, 2021_
+*August 16, 2021*
 
 ## v0.5.1
 

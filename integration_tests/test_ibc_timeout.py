@@ -5,8 +5,6 @@ from .utils import wait_for_fn
 
 pytestmark = pytest.mark.ibc_timeout
 
-pytestmark = pytest.mark.ibc_timeout
-
 
 @pytest.fixture(scope="module")
 def ibc(request, tmp_path_factory):

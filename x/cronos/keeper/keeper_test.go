@@ -35,11 +35,6 @@ const (
 	denomGravity = "gravity0x0000000000000000000000000000000000000000"
 )
 
-const (
-	denom        = "testdenom"
-	denomGravity = "gravity0x0000000000000000000000000000000000000000"
-)
-
 func TestKeeperTestSuite(t *testing.T) {
 	suite.Run(t, new(KeeperTestSuite))
 }
@@ -421,8 +416,7 @@ func (suite *KeeperTestSuite) TestRegisterOrUpdateTokenMapping() {
 			suite.app.CronosKeeper = cronosKeeper
 
 			tc.malleate()
-			msg := tc.msg
-			err := suite.app.CronosKeeper.RegisterOrUpdateTokenMapping(suite.ctx, &msg)
+			err := suite.app.CronosKeeper.RegisterOrUpdateTokenMapping(suite.ctx, &tc.msg)
 			if tc.error {
 				suite.Require().Error(err)
 			} else {
