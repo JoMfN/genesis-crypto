@@ -5,7 +5,7 @@ import pytest
 from .ibc_utils import (
     funds_ica,
     get_balance,
-    ica_send_tx,
+    ica_ctrl_send_tx,
     prepare_network,
     register_acc,
 )
@@ -22,12 +22,11 @@ def ibc(request, tmp_path_factory):
     yield from prepare_network(path, name)
 
 
-@pytest.mark.skip("The ibc-fee module has been removed in the ibc-go v10")
 def test_incentivized(ibc):
     connid = "connection-0"
     cli_host = ibc.chainmain.cosmos_cli()
     cli_controller = ibc.cronos.cosmos_cli()
-    ica_address, _, channel_id = register_acc(cli_controller, connid)
+    ica_address, channel_id = register_acc(cli_controller, connid)
     relayer = cli_controller.address("signer1")
     balance = funds_ica(cli_host, ica_address)
     ibc.cronos.supervisorctl("stop", "relayer-demo")
@@ -65,7 +64,7 @@ def test_incentivized(ibc):
         )
         assert rsp["code"] == 0, rsp["raw_log"]
 
-    ica_send_tx(
+    ica_ctrl_send_tx(
         cli_host,
         cli_controller,
         connid,
@@ -80,8 +79,7 @@ def test_incentivized(ibc):
     balance -= amount * msg_num
 
     # fee is locked
-    # https://github.com/cosmos/ibc-go/pull/5571
-    assert cli_controller.balance(sender, fee_denom) == old_amt_sender_fee - 20
+    assert cli_controller.balance(sender, fee_denom) == old_amt_sender_fee - 30
     # check if the funds are reduced in interchain account
     assert cli_host.balance(ica_address, denom=denom) == balance
 

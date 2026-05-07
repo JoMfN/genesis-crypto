@@ -14,13 +14,7 @@ def ibc(request, tmp_path_factory):
     "prepare-network"
     name = "ibc"
     path = tmp_path_factory.mktemp(name)
-    yield from prepare_network(
-        path,
-        name,
-        is_relay=False,
-        is_ibc_transfer=True,
-        incentivized=False,
-    )
+    yield from prepare_network(path, name, is_relay=False)
 
 
 def test_ibc_update_client(ibc, tmp_path):
@@ -47,8 +41,6 @@ def test_ibc_update_client(ibc, tmp_path):
 
 
 def test_ibc_update_client_via_proposal(ibc):
-    # rly: use ibc_update_client_with_header instead
-    return
     """
     test update expire subject client with new active client via proposal
     """
@@ -63,7 +55,7 @@ def test_ibc_update_client_via_proposal(ibc):
         "--reference-chain",
         "chainmain-1",
     ]
-    trust_period = "45s"
+    trust_period = "30s"
     subprocess.check_call(cmd + ["--trusting-period", trust_period])
     # create new connection with new client
     cmd = cmd0 + [
@@ -125,19 +117,17 @@ def test_ibc_update_client_via_proposal(ibc):
         return status != "Active"
 
     wait_for_fn("status change", check_status)
-    rsp = cli.ibc_recover_client(
+    rsp = cli.gov_propose_update_client_legacy(
         {
             "subject_client_id": "07-tendermint-1",
             "substitute_client_id": "07-tendermint-2",
             "from": "validator",
             "title": "update-client-title",
-            "summary": "summary",
+            "description": "update-client-description",
             "deposit": "1basetcro",
         },
     )
     assert rsp["code"] == 0, rsp["raw_log"]
-    approve_proposal(
-        ibc.cronos, rsp["events"], msg="ibc.core.client.v1.MsgRecoverClient"
-    )
+    approve_proposal(ibc.cronos, rsp)
     default_trust_period = "1209600s"
     assert_trust_period(default_trust_period)

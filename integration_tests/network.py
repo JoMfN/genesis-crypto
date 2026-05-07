@@ -7,14 +7,14 @@ from pathlib import Path
 import tomlkit
 import web3
 from pystarport import cluster, ports
-from web3.middleware import ExtraDataToPOAMiddleware
+from web3.middleware import geth_poa_middleware
 
 from .cosmoscli import CosmosCLI
-from .utils import supervisorctl, w3_wait_for_block, wait_for_port
+from .utils import supervisorctl, wait_for_port
 
 
 class Cronos:
-    def __init__(self, base_dir, chain_binary="genesisd"):
+    def __init__(self, base_dir, chain_binary="cronosd"):
         self._w3 = None
         self.base_dir = base_dir
         self.config = json.loads((base_dir / "config.json").read_text())
@@ -43,9 +43,7 @@ class Cronos:
 
     def node_w3(self, i=0):
         if self._use_websockets:
-            return web3.Web3(
-                web3.providers.LegacyWebSocketProvider(self.w3_ws_endpoint(i))
-            )
+            return web3.Web3(web3.providers.WebsocketProvider(self.w3_ws_endpoint(i)))
         else:
             return web3.Web3(web3.providers.HTTPProvider(self.w3_http_endpoint(i)))
 
@@ -129,7 +127,7 @@ def setup_geth(path, base_port):
         try:
             wait_for_port(base_port)
             w3 = web3.Web3(web3.providers.HTTPProvider(f"http://127.0.0.1:{base_port}"))
-            w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
+            w3.middleware_onion.inject(geth_poa_middleware, layer=0)
             yield Geth(w3)
         finally:
             try:
@@ -188,9 +186,7 @@ def setup_custom_cronos(
         if wait_port:
             wait_for_port(ports.evmrpc_port(base_port))
             wait_for_port(ports.evmrpc_ws_port(base_port))
-        c = Cronos(path / "cronos_777-1", chain_binary=chain_binary or "genesisd")
-        w3_wait_for_block(c.w3, 1)
-        yield c
+        yield Cronos(path / "cronos_777-1", chain_binary=chain_binary or "cronosd")
     finally:
         os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
         # proc.terminate()

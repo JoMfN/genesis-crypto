@@ -24,11 +24,9 @@ config {
         },
         transfer:: super['transfer'],
       },
-      consensus+: {
-        params+: {
-          block+: {
-            time_iota_ms: '2000',
-          },
+      consensus_params+: {
+        block+: {
+           time_iota_ms: '2000',
         },
       },
     },

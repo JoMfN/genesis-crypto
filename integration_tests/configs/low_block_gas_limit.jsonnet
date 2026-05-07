@@ -13,11 +13,9 @@ config {
       },
     },
     genesis+: {
-      consensus+: {
-        params+: {
-          block+: {
-            max_gas: '815000',
-          },
+      consensus_params+: {
+        block+: {
+          max_gas: '815000',
         },
       },
     },

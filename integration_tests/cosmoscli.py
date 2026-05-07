@@ -1,7 +1,6 @@
 import binascii
 import enum
 import hashlib
-import itertools
 import json
 import os
 import re
@@ -13,8 +12,6 @@ import bech32
 import requests
 from dateutil.parser import isoparse
 from pystarport.utils import build_cli_args_safe, format_doc_string, interact
-
-from .utils import CRONOS_ADDRESS_PREFIX, get_sync_info
 
 # the default initial base fee used by integration tests
 DEFAULT_GAS_PRICE = "100000000000basetcro"
@@ -34,14 +31,14 @@ class ModuleAccount(enum.Enum):
 @format_doc_string(
     options=",".join(v.value for v in ModuleAccount.__members__.values())
 )
-def module_address(name, prefix=CRONOS_ADDRESS_PREFIX):
+def module_address(name):
     """
     get address of module accounts
 
     :param name: name of module account, values: {options}
     """
     data = hashlib.sha256(ModuleAccount(name).value.encode()).digest()[:20]
-    return bech32.bech32_encode(prefix, bech32.convertbits(data, 8, 5))
+    return bech32.bech32_encode("cro", bech32.convertbits(data, 8, 5))
 
 
 class ChainCommand:
@@ -175,22 +172,15 @@ class CosmosCLI:
         return json.loads(self.raw("status", node=self.node_rpc))
 
     def block_height(self):
-        return int(get_sync_info(self.status())["latest_block_height"])
+        return int(self.status()["SyncInfo"]["latest_block_height"])
 
     def block_time(self):
-        return isoparse(get_sync_info(self.status())["latest_block_time"])
+        return isoparse(self.status()["SyncInfo"]["latest_block_time"])
 
     def balances(self, addr, height=0):
         return json.loads(
             self.raw(
-                "query",
-                "bank",
-                "balances",
-                addr,
-                height=height,
-                output="json",
-                home=self.data_dir,
-                node=self.node_rpc,
+                "query", "bank", "balances", addr, height=height, home=self.data_dir
             )
         )["balances"]
 
@@ -221,6 +211,7 @@ class CosmosCLI:
             addr,
             home=self.data_dir,
             keyring_backend="test",
+            chain_id=self.chain_id,
             node=self.node_rpc,
         )
         return json.loads(txs)
@@ -228,9 +219,7 @@ class CosmosCLI:
     def tx_search(self, events: str):
         "/tx_search"
         return json.loads(
-            self.raw(
-                "query", "txs", query=f'"{events}"', output="json", node=self.node_rpc
-            )
+            self.raw("query", "txs", events=events, output="json", node=self.node_rpc)
         )
 
     def tx_search_rpc(self, criteria: str, order=None):
@@ -246,18 +235,6 @@ class CosmosCLI:
         ).json()
         assert "error" not in rsp, rsp["error"]
         return rsp["result"]["txs"]
-
-    def query_account(self, addr, **kwargs):
-        return json.loads(
-            self.raw(
-                "query",
-                "auth",
-                "account",
-                addr,
-                home=self.data_dir,
-                **kwargs,
-            )
-        )
 
     def distribution_commission(self, addr):
         coin = json.loads(
@@ -283,7 +260,7 @@ class CosmosCLI:
                 **kwargs,
             )
         )["pool"][0]
-        return coin
+        return float(coin["amount"])
 
     def distribution_reward(self, delegator_addr, **kwargs):
         coin = json.loads(
@@ -318,18 +295,6 @@ class CosmosCLI:
             )
         )
 
-    def account_by_num(self, num):
-        return json.loads(
-            self.raw(
-                "q",
-                "auth",
-                "address-by-acc-num",
-                num,
-                output="json",
-                node=self.node_rpc,
-            )
-        )
-
     def total_supply(self):
         return json.loads(
             self.raw("query", "bank", "total", output="json", node=self.node_rpc)
@@ -360,23 +325,15 @@ class CosmosCLI:
         )
 
     def staking_pool(self, bonded=True):
-        res = self.raw("query", "staking", "pool", output="json", node=self.node_rpc)
-        res = json.loads(res)
-        res = res.get("pool") or res
-        return int(res["bonded_tokens" if bonded else "not_bonded_tokens"])
+        return int(
+            json.loads(
+                self.raw("query", "staking", "pool", output="json", node=self.node_rpc)
+            )["bonded_tokens" if bonded else "not_bonded_tokens"]
+        )
 
-    def transfer(
-        self,
-        from_,
-        to,
-        coins,
-        generate_only=False,
-        event_query_tx=True,
-        fees=None,
-        **kwargs,
-    ):
+    def transfer(self, from_, to, coins, generate_only=False, fees=None, **kwargs):
         kwargs.setdefault("gas_prices", DEFAULT_GAS_PRICE)
-        rsp = json.loads(
+        return json.loads(
             self.raw(
                 "tx",
                 "bank",
@@ -391,9 +348,6 @@ class CosmosCLI:
                 **kwargs,
             )
         )
-        if rsp["code"] == 0 and event_query_tx:
-            rsp = self.event_query_tx_for(rsp["txhash"])
-        return rsp
 
     def get_delegated_amount(self, which_addr):
         return json.loads(
@@ -601,12 +555,9 @@ class CosmosCLI:
     def broadcast_tx(self, tx_file, **kwargs):
         kwargs.setdefault("broadcast_mode", "sync")
         kwargs.setdefault("output", "json")
-        rsp = json.loads(
+        return json.loads(
             self.raw("tx", "broadcast", tx_file, node=self.node_rpc, **kwargs)
         )
-        if rsp["code"] == 0:
-            rsp = self.event_query_tx_for(rsp["txhash"])
-        return rsp
 
     def broadcast_tx_json(self, tx, **kwargs):
         with tempfile.NamedTemporaryFile("w") as fp:
@@ -667,7 +618,7 @@ class CosmosCLI:
                 amount=amount,
                 pubkey=pubkey,
                 min_self_delegation=min_self_delegation,
-                # commission
+                # commision
                 commission_rate=commission_rate,
                 commission_max_rate=commission_max_rate,
                 commission_max_change_rate=commission_max_change_rate,
@@ -857,7 +808,7 @@ class CosmosCLI:
         )
 
     def query_proposal(self, proposal_id):
-        res = json.loads(
+        return json.loads(
             self.raw(
                 "query",
                 "gov",
@@ -867,10 +818,9 @@ class CosmosCLI:
                 node=self.node_rpc,
             )
         )
-        return res.get("proposal") or res
 
     def query_tally(self, proposal_id):
-        res = json.loads(
+        return json.loads(
             self.raw(
                 "query",
                 "gov",
@@ -880,7 +830,6 @@ class CosmosCLI:
                 node=self.node_rpc,
             )
         )
-        return res.get("tally") or res
 
     def ibc_transfer(
         self,
@@ -888,7 +837,7 @@ class CosmosCLI:
         to,
         amount,
         channel,  # src channel
-        target_version=1,  # chain version number of target chain
+        target_version,  # chain version number of target chain
         event_query_tx_for=False,
         **kwargs,
     ):
@@ -946,8 +895,8 @@ class CosmosCLI:
             )
         )["denom_trace"]
 
-    def export(self, **kwargs):
-        return self.raw("export", home=self.data_dir, **kwargs)
+    def export(self):
+        return self.raw("export", home=self.data_dir)
 
     def unsaferesetall(self):
         return self.raw("tendermint", "unsafe-reset-all")
@@ -1112,18 +1061,8 @@ class CosmosCLI:
     def query_gravity_params(self):
         return self.query_params("gravity")
 
-    def query_params(self, module="cronos", **kwargs):
-        res = json.loads(
-            self.raw(
-                "query",
-                module,
-                "params",
-                home=self.data_dir,
-                **kwargs,
-            )
-        )
-        res = res.get("params") or res
-        return res
+    def query_params(self, module="cronos"):
+        return json.loads(self.raw("query", module, "params", home=self.data_dir))
 
     def query_signer_set_txs(self):
         return json.loads(
@@ -1215,15 +1154,15 @@ class CosmosCLI:
             )
         )
 
-    def ibc_recover_client(self, proposal, **kwargs):
+    def gov_propose_update_client_legacy(self, proposal, **kwargs):
         kwargs.setdefault("gas_prices", DEFAULT_GAS_PRICE)
         kwargs.setdefault("gas", 600000)
         rsp = json.loads(
             self.raw(
                 "tx",
-                "ibc",
-                "client",
-                "recover-client",
+                "gov",
+                "submit-legacy-proposal",
+                "update-client",
                 proposal.get("subject_client_id"),
                 proposal.get("substitute_client_id"),
                 "-y",
@@ -1231,8 +1170,8 @@ class CosmosCLI:
                 keyring_backend="test",
                 # content
                 title=proposal.get("title"),
+                description=proposal.get("description"),
                 deposit=proposal.get("deposit"),
-                summary=proposal.get("summary"),
                 chain_id=self.chain_id,
                 home=self.data_dir,
                 stderr=subprocess.DEVNULL,
@@ -1243,106 +1182,21 @@ class CosmosCLI:
             rsp = self.event_query_tx_for(rsp["txhash"])
         return rsp
 
-    def ibc_upgrade_channels(self, version, from_addr, **kwargs):
-        kwargs.setdefault("gas_prices", DEFAULT_GAS_PRICE)
-        kwargs.setdefault("gas", 600000)
-        return json.loads(
+    def submit_gov_proposal(self, proposal, **kwargs):
+        default_kwargs = self.get_default_kwargs()
+        rsp = json.loads(
             self.raw(
                 "tx",
-                "ibc",
-                "channel",
-                "upgrade-channels",
-                json.dumps(version),
+                "gov",
+                "submit-proposal",
+                proposal,
                 "-y",
-                "--json",
-                from_=from_addr,
-                keyring_backend="test",
-                chain_id=self.chain_id,
                 home=self.data_dir,
                 stderr=subprocess.DEVNULL,
-                **kwargs,
+                **(default_kwargs | kwargs),
             )
         )
-
-    def submit_gov_proposal(
-        self,
-        proposer,
-        kind,
-        proposal,
-        wait_tx=True,
-        **kwargs,
-    ):
-        default_kwargs = self.get_default_kwargs()
-        kwargs.setdefault("broadcast_mode", "sync")
-        if kind == "software-upgrade":
-            rsp = json.loads(
-                self.raw(
-                    "tx",
-                    "upgrade",
-                    kind,
-                    proposal["name"],
-                    "-y",
-                    "--no-validate",
-                    from_=proposer,
-                    # content
-                    title=proposal.get("title"),
-                    summary=proposal.get("summary"),
-                    upgrade_height=proposal.get("upgrade-height"),
-                    upgrade_time=proposal.get("upgrade-time"),
-                    upgrade_info=proposal.get("upgrade-info", "info"),
-                    deposit=proposal.get("deposit"),
-                    # basic
-                    home=self.data_dir,
-                    node=self.node_rpc,
-                    keyring_backend="test",
-                    chain_id=self.chain_id,
-                    stderr=subprocess.DEVNULL,
-                    **(default_kwargs | kwargs),
-                )
-            )
-        elif kind == "cancel-software-upgrade":
-            rsp = json.loads(
-                self.raw(
-                    "tx",
-                    "upgrade",
-                    kind,
-                    "-y",
-                    from_=proposer,
-                    # content
-                    title=proposal.get("title"),
-                    summary=proposal.get("summary"),
-                    deposit=proposal.get("deposit"),
-                    # basic
-                    home=self.data_dir,
-                    node=self.node_rpc,
-                    keyring_backend="test",
-                    chain_id=self.chain_id,
-                    stderr=subprocess.DEVNULL,
-                    **(default_kwargs | kwargs),
-                )
-            )
-        else:
-            with tempfile.NamedTemporaryFile("w") as fp:
-                json.dump(proposal, fp)
-                fp.flush()
-                rsp = json.loads(
-                    self.raw(
-                        "tx",
-                        "gov",
-                        "submit-proposal",
-                        fp.name,
-                        "-y",
-                        from_=proposer,
-                        # basic
-                        home=self.data_dir,
-                        node=self.node_rpc,
-                        keyring_backend="test",
-                        chain_id=self.chain_id,
-                        stderr=subprocess.DEVNULL,
-                        **(default_kwargs | kwargs),
-                    )
-                )
-        if rsp["code"] == 0 and wait_tx:
+        if rsp["code"] == 0:
             rsp = self.event_query_tx_for(rsp["txhash"])
         return rsp
 
@@ -1405,7 +1259,7 @@ class CosmosCLI:
             rsp = self.event_query_tx_for(rsp["txhash"])
         return rsp
 
-    def ica_register_account(self, connid, **kwargs):
+    def icaauth_register_account(self, connid, **kwargs):
         "execute on host chain to attach an account to the connection"
         default_kwargs = {
             "home": self.data_dir,
@@ -1416,9 +1270,8 @@ class CosmosCLI:
         rsp = json.loads(
             self.raw(
                 "tx",
-                "ica",
-                "controller",
-                "register",
+                "icaauth",
+                "register-account",
                 connid,
                 "-y",
                 **(default_kwargs | kwargs),
@@ -1428,7 +1281,31 @@ class CosmosCLI:
             rsp = self.event_query_tx_for(rsp["txhash"])
         return rsp
 
-    def ica_send_tx(self, connid, tx, timeout_in_ns=None, **kwargs):
+    def icaauth_submit_tx(self, connid, tx, timeout_duration="1h", **kwargs):
+        default_kwargs = {
+            "home": self.data_dir,
+            "node": self.node_rpc,
+            "chain_id": self.chain_id,
+            "keyring_backend": "test",
+        }
+        rsp = json.loads(
+            self.raw(
+                "tx",
+                "icaauth",
+                "submit-tx",
+                connid,
+                tx,
+                "--timeout-duration" if timeout_duration else None,
+                timeout_duration if timeout_duration else None,
+                "-y",
+                **(default_kwargs | kwargs),
+            )
+        )
+        if rsp["code"] == 0:
+            rsp = self.event_query_tx_for(rsp["txhash"])
+        return rsp
+
+    def ica_ctrl_send_tx(self, connid, tx, timeout_in_ns=None, **kwargs):
         default_kwargs = {
             "home": self.data_dir,
             "node": self.node_rpc,
@@ -1443,7 +1320,7 @@ class CosmosCLI:
                 "send-tx",
                 connid,
                 tx,
-                "--packet-timeout-timestamp" if timeout_in_ns else None,
+                "--relative-packet-timeout" if timeout_in_ns else None,
                 timeout_in_ns if timeout_in_ns else None,
                 "-y",
                 **(default_kwargs | kwargs),
@@ -1461,26 +1338,10 @@ class CosmosCLI:
         return json.loads(
             self.raw(
                 "q",
-                "ica",
-                "controller",
-                "interchain-account",
-                owner,
+                "icaauth",
+                "interchain-account-address",
                 connid,
-                **(default_kwargs | kwargs),
-            )
-        )
-
-    def query_ica_params(self, **kwargs):
-        default_kwargs = {
-            "node": self.node_rpc,
-            "output": "json",
-        }
-        return json.loads(
-            self.raw(
-                "q",
-                "ica",
-                "controller",
-                "params",
+                owner,
                 **(default_kwargs | kwargs),
             )
         )
@@ -1512,23 +1373,6 @@ class CosmosCLI:
                 "channel",
                 "connections",
                 connid,
-                **(default_kwargs | kwargs),
-            )
-        )
-
-    def ibc_query_channel(self, port_id, channel_id, **kwargs):
-        default_kwargs = {
-            "node": self.node_rpc,
-            "output": "json",
-        }
-        return json.loads(
-            self.raw(
-                "q",
-                "ibc",
-                "channel",
-                "end",
-                port_id,
-                channel_id,
                 **(default_kwargs | kwargs),
             )
         )
@@ -1617,6 +1461,35 @@ class CosmosCLI:
             )
         )
 
+    def query_icaauth_params(self, **kwargs):
+        default_kwargs = {
+            "node": self.node_rpc,
+            "output": "json",
+        }
+        return json.loads(
+            self.raw(
+                "q",
+                "icaauth",
+                "params",
+                **(default_kwargs | kwargs),
+            )
+        )
+
+    def query_icacontroller_params(self, **kwargs):
+        default_kwargs = {
+            "node": self.node_rpc,
+            "output": "json",
+        }
+        return json.loads(
+            self.raw(
+                "q",
+                "interchain-accounts",
+                "controller",
+                "params",
+                **(default_kwargs | kwargs),
+            )
+        )
+
     def query_gravity_contract_by_denom(self, denom: str):
         "query CosmosERC20 contract address by denom"
         return json.loads(
@@ -1659,7 +1532,7 @@ class CosmosCLI:
         default_kwargs = {
             "home": self.data_dir,
         }
-        rsp = json.loads(
+        return json.loads(
             self.raw(
                 "tx",
                 "ibc-fee",
@@ -1672,12 +1545,12 @@ class CosmosCLI:
                 **(default_kwargs | kwargs),
             )
         )
-        if rsp["code"] == 0:
-            rsp = self.event_query_tx_for(rsp["txhash"])
-        return rsp
 
     def register_payee(self, port_id, channel_id, relayer, payee, **kwargs):
-        rsp = json.loads(
+        default_kwargs = {
+            "home": self.data_dir,
+        }
+        return json.loads(
             self.raw(
                 "tx",
                 "ibc-fee",
@@ -1687,15 +1560,14 @@ class CosmosCLI:
                 relayer,
                 payee,
                 "-y",
-                home=self.data_dir,
-                **kwargs,
+                **(default_kwargs | kwargs),
             )
         )
-        if rsp["code"] == 0:
-            rsp = self.event_query_tx_for(rsp["txhash"])
-        return rsp
 
     def pay_packet_fee(self, port_id, channel_id, packet_seq, **kwargs):
+        default_kwargs = {
+            "home": self.data_dir,
+        }
         rsp = json.loads(
             self.raw(
                 "tx",
@@ -1705,8 +1577,7 @@ class CosmosCLI:
                 channel_id,
                 str(packet_seq),
                 "-y",
-                home=self.data_dir,
-                **kwargs,
+                **(default_kwargs | kwargs),
             )
         )
         if rsp["code"] == 0:
@@ -1715,7 +1586,7 @@ class CosmosCLI:
 
     def query_grant(self, granter, grantee):
         "query grant details by granter and grantee addresses"
-        res = json.loads(
+        return json.loads(
             self.raw(
                 "query",
                 "feegrant",
@@ -1723,12 +1594,8 @@ class CosmosCLI:
                 granter,
                 grantee,
                 home=self.data_dir,
-                node=self.node_rpc,
-                output="json",
             )
         )
-        res = res.get("allowance") or res
-        return res
 
     def grant(self, granter, grantee, limit, **kwargs):
         default_kwargs = self.get_default_kwargs()
@@ -1824,24 +1691,6 @@ class CosmosCLI:
             rsp = self.event_query_tx_for(rsp["txhash"])
         return rsp
 
-    def store_blocklist(self, data, **kwargs):
-        kwargs.setdefault("gas_prices", DEFAULT_GAS_PRICE)
-        kwargs.setdefault("gas", DEFAULT_GAS)
-        rsp = json.loads(
-            self.raw(
-                "tx",
-                "cronos",
-                "store-block-list",
-                data,
-                "-y",
-                home=self.data_dir,
-                **kwargs,
-            )
-        )
-        if rsp["code"] == 0:
-            rsp = self.event_query_tx_for(rsp["txhash"])
-        return rsp
-
     def rollback(self):
         self.raw("rollback", home=self.data_dir)
 
@@ -1882,11 +1731,6 @@ class CosmosCLI:
     def restore_versiondb(self, height, format=3):
         return self.raw(
             "changeset", "restore-versiondb", height, format, home=self.data_dir
-        )
-
-    def changeset_fixdata(self, versiondb_dir, dry_run=False):
-        return self.raw(
-            "changeset", "fixdata", versiondb_dir, "--dry-run" if dry_run else None
         )
 
     def dump_snapshot(self, height, tarball, format=3):
@@ -1954,110 +1798,12 @@ class CosmosCLI:
                 "query",
                 "event-query-tx-for",
                 hash,
-                home=self.data_dir,
-            )
-        )
-
-    def query_bank_send(self, *denoms):
-        return json.loads(
-            self.raw(
-                "q",
-                "bank",
-                "send-enabled",
-                *denoms,
-                home=self.data_dir,
-                output="json",
-            )
-        ).get("send_enabled", [])
-
-    def query_e2ee_key(self, address):
-        return json.loads(
-            self.raw(
-                "q",
-                "e2ee",
-                "key",
-                address,
-                home=self.data_dir,
-                output="json",
-            )
-        ).get("key")
-
-    def query_e2ee_keys(self, *addresses):
-        return json.loads(
-            self.raw(
-                "q",
-                "e2ee",
-                "keys",
-                *addresses,
-                home=self.data_dir,
-                output="json",
-            )
-        ).get("keys")
-
-    def register_e2ee_key(self, key, **kwargs):
-        kwargs.setdefault("gas_prices", DEFAULT_GAS_PRICE)
-        kwargs.setdefault("gas", DEFAULT_GAS)
-        rsp = json.loads(
-            self.raw(
-                "tx",
-                "e2ee",
-                "register-encryption-key",
-                key,
                 "-y",
                 home=self.data_dir,
-                **kwargs,
+                stderr=subprocess.DEVNULL,
             )
         )
-        if rsp["code"] == 0:
-            rsp = self.event_query_tx_for(rsp["txhash"])
-        return rsp
 
-    def e2ee_keygen(self, **kwargs):
-        return self.raw("e2ee", "keygen", home=self.data_dir, **kwargs).strip().decode()
-
-    def e2ee_pubkey(self, **kwargs):
-        return self.raw("e2ee", "pubkey", home=self.data_dir, **kwargs).strip().decode()
-
-    def e2ee_encrypt(self, input, *recipients, **kwargs):
-        return (
-            self.raw(
-                "e2ee",
-                "encrypt",
-                input,
-                *itertools.chain.from_iterable(("-r", r) for r in recipients),
-                home=self.data_dir,
-                **kwargs,
-            )
-            .strip()
-            .decode()
-        )
-
-    def e2ee_decrypt(self, input, identity="e2ee-identity", **kwargs):
-        return (
-            self.raw(
-                "e2ee",
-                "decrypt",
-                input,
-                home=self.data_dir,
-                identity=identity,
-                **kwargs,
-            )
-            .strip()
-            .decode()
-        )
-
-    def e2ee_encrypt_to_validators(self, input, **kwargs):
-        return (
-            self.raw(
-                "e2ee",
-                "encrypt-to-validators",
-                input,
-                home=self.data_dir,
-                **kwargs,
-            )
-            .strip()
-            .decode()
-        )
-
-    def prune(self, kind="everything"):
-        return self.raw("prune", kind, home=self.data_dir).decode()
+    def query_bank_send(self):
+        res = json.loads(self.raw("q", "bank", "send-enabled", home=self.data_dir))
+        return res["send_enabled"]
