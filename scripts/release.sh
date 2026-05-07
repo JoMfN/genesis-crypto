@@ -28,8 +28,8 @@ build() {
         fi
     fi
     echo "building $FLAKE"
-    nix build --no-update-lock-file --no-allow-dirty -L "$FLAKE"
-    cp result "cronos_${ref_name_clean:1}${network}_${name}.tar.gz"
+    nix build -L "$FLAKE"
+    cp result "genesis_${ref_name_clean:1}${network}_${name}.tar.gz"
 }
 
 if [[ "$build_platform" == "x86_64-linux" ]]; then

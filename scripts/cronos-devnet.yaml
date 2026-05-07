@@ -1,6 +1,6 @@
 dotenv: .env
 cronos_777-1:
-  cmd: genesisd
+  cmd: cronosd
   start-flags: "--trace"
   app-config:
     minimum-gas-prices: 0basetcro
@@ -29,11 +29,10 @@ cronos_777-1:
       mnemonic: ${SIGNER2_MNEMONIC}
 
   genesis:
-    consensus:
-      params:
-        block:
-          max_bytes: "1048576"
-          max_gas: "81500000"
+    consensus_params:
+      block:
+        max_bytes: "1048576"
+        max_gas: "81500000"
     app_state:
       evm:
         params:
@@ -45,7 +44,6 @@ cronos_777-1:
           ibc_cro_denom: ${IBC_CRO_DENOM}
       gov:
         params:
-          expedited_voting_period: "1s"
           voting_period: "10s"
           max_deposit_period: "10s"
           min_deposit:
