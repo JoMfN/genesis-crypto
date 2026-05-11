@@ -40,7 +40,7 @@ buildGoApplication rec {
   ] ./.);
   modules = ./gomod2nix.toml;
   pwd = src; # needed to support replace
-  subPackages = [ "cmd/genesisd" ];
+  subPackages = [ "cmd/cronosd" ];
   buildFlags = lib.optionalString coverage "-cover";
   CGO_ENABLED = "1";
   CGO_LDFLAGS = lib.optionalString (rocksdb != null) (
@@ -48,6 +48,18 @@ buildGoApplication rec {
     else if stdenv.hostPlatform.isWindows then "-lrocksdb-shared"
     else "-lrocksdb -pthread -lstdc++ -ldl"
   );
+
+  postInstall = ''
+    ext="${stdenv.hostPlatform.extensions.executable}"
+
+    if [ -f "$out/bin/cronosd$ext" ]; then
+      mv "$out/bin/cronosd$ext" "$out/bin/genesisd$ext"
+    fi
+
+    if [ -f "$out/bin/cronosd" ]; then
+      mv "$out/bin/cronosd" "$out/bin/genesisd"
+    fi
+  '';
 
   postFixup = lib.optionalString (stdenv.isDarwin && rocksdb != null) ''
     ${stdenv.cc.bintools.targetPrefix}install_name_tool -change "@rpath/librocksdb.8.dylib" "${rocksdb}/lib/librocksdb.dylib" $out/bin/genesisd

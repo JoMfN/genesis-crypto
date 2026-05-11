@@ -47,7 +47,7 @@ else
     exit 1
 fi
 
-for network in "" "-testnet"; do
+for network in ""; do # removed "-testnet"
     for t in $hosts; do
         IFS=',' read name host <<< "${t}"
         build "$network" "$host" "$name"

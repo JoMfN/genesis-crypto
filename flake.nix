@@ -91,7 +91,7 @@
             --owner=0 --group=0 --mode=u+rw,uga+r --hard-dereference . \
             | gzip -9 > $out
         '';
-        bundle-win-exe = drv: final.callPackage ./nix/bundle-win-exe.nix { genesisd = drv; };
+        bundle-win-exe = drv: final.callPackage ./nix/bundle-win-exe.nix { cronosd = drv; };
       } // (with final;
         let
           matrix = lib.cartesianProductOfSets {
