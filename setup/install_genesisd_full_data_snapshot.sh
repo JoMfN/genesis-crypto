@@ -21,7 +21,7 @@ VERSION_TAG="v1.0.0"
 
 GENESIS_URL="https://raw.githubusercontent.com/GenesisL1/genesis-parameters/main/genesis_29-2/genesis.json"
 
-# Full data folder snapshot (contains ./data/* at archive root)
+# Full data folder snapshot (contains ./data/* at archive root) - see http://lcserve.zip for more updated download url
 SNAPSHOT_URL="https://ftp.basementnodes.ca/snapshots/gl1/data.tar.lz4"
 
 # Networking
@@ -42,6 +42,7 @@ STATE_SYNC_RPC_SERVERS="https://api1.lcserve.eu,https://26657.genesisl1.org:443"
 
 STATE_SYNC_TRUST_PERIOD="168h0m0s"
 
+# ---------------- Helper Functions --------------------------
 
 pick_working_rpc() {
   local rpcs_csv="$1"
@@ -111,35 +112,7 @@ update_statesync_section() {
   ' "${cfg}" > "${cfg}.tmp" && mv "${cfg}.tmp" "${cfg}"
 }
 
-
-echo "==> Auto-configuring state-sync trust params"
-WORKING_RPC="$(pick_working_rpc "${STATE_SYNC_RPC_SERVERS}")" || {
-  echo "WARNING: No working RPC found for state-sync from: ${STATE_SYNC_RPC_SERVERS}"
-  echo "         Leaving rpc_servers/trust_height/trust_hash unchanged."
-  WORKING_RPC=""
-}
-
-if [[ -n "${WORKING_RPC}" ]]; then
-  if read -r LATEST_HEIGHT TRUST_HEIGHT TRUST_HASH < <(compute_statesync_trust "${WORKING_RPC}"); then
-    echo "    RPC: ${WORKING_RPC}"
-    echo "    LATEST_BLOCK_HEIGHT: ${LATEST_HEIGHT}"
-    echo "    TRUST_HEIGHT: ${TRUST_HEIGHT}"
-    echo "    TRUST_HASH: ${TRUST_HASH}"
-
-    update_statesync_section \
-      "${HOME_DIR}/config/config.toml" \
-      "${STATE_SYNC_ENABLE}" \
-      "${STATE_SYNC_RPC_SERVERS}" \
-      "${TRUST_HEIGHT}" \
-      "${TRUST_HASH}" \
-      "${STATE_SYNC_TRUST_PERIOD}"
-  else
-    echo "WARNING: Failed to compute trust params from ${WORKING_RPC}"
-  fi
-fi
-
-
-
+# ---------------- Dependency Install --------------------------
 # Go
 GO_VER="1.24.13"
 
@@ -224,6 +197,33 @@ LimitNOFILE=65535
 [Install]
 WantedBy=multi-user.target
 EOF
+
+echo "==> Auto-configuring state-sync trust params"
+WORKING_RPC="$(pick_working_rpc "${STATE_SYNC_RPC_SERVERS}")" || {
+  echo "WARNING: No working RPC found for state-sync from: ${STATE_SYNC_RPC_SERVERS}"
+  echo "         Leaving rpc_servers/trust_height/trust_hash unchanged."
+  WORKING_RPC=""
+}
+
+if [[ -n "${WORKING_RPC}" ]]; then
+  if read -r LATEST_HEIGHT TRUST_HEIGHT TRUST_HASH < <(compute_statesync_trust "${WORKING_RPC}"); then
+    echo "    RPC: ${WORKING_RPC}"
+    echo "    LATEST_BLOCK_HEIGHT: ${LATEST_HEIGHT}"
+    echo "    TRUST_HEIGHT: ${TRUST_HEIGHT}"
+    echo "    TRUST_HASH: ${TRUST_HASH}"
+
+    update_statesync_section \
+      "${HOME_DIR}/config/config.toml" \
+      "${STATE_SYNC_ENABLE}" \
+      "${STATE_SYNC_RPC_SERVERS}" \
+      "${TRUST_HEIGHT}" \
+      "${TRUST_HASH}" \
+      "${STATE_SYNC_TRUST_PERIOD}"
+  else
+    echo "WARNING: Failed to compute trust params from ${WORKING_RPC}"
+  fi
+fi
+
 
 sudo systemctl daemon-reload
 sudo systemctl enable genesisd
