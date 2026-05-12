@@ -3,10 +3,6 @@
 </h1>
 
 <p align="center">
-  <ins>Release <b>v1.0.0</b> ~ Cronos <b>v1.0.15</b></ins>
-</p>
-
-<p align="center">
   <img src="https://avatars.githubusercontent.com/u/88520218" alt="GenesisL1" width="150" height="150"/>
 </p>
 
@@ -19,7 +15,7 @@
 </p>
 
 <p align="center">
-  Cosmos SDK <b>v0.46.15</b>
+  Cosmos SDK <b>v0.47.10</b>
 </p>
 
 ---
@@ -40,13 +36,12 @@ Use a fully synced 622GB `data` folder provided by the community, compressed to 
 Sync your node from a trusted block height using the built-in **state sync** mechanism.
 
 ### 🔹 OPTION C: Upgrade Existing Node
-Migrate from the legacy Evmos-based network `genesis-ethermint` to the current Cronos-fork chain.
+Upgrade an existing node to the latest network version.
 
-> [!WARNING]
-> ⚠️ **Legacy Node Warning:**
-> 
-> We were an Evmos-fork before deciding to hard fork to Cronos. If you're attempting a full-node sync from scratch, follow the instructions in the [`genesis-ethermint`](https://github.com/GenesisL1/genesis-ethermint) repository first.
-
+This option applies to:
+- legacy nodes based on `genesis-ethermint`
+  > We were an Evmos-fork before deciding to hard fork to Cronos. If you're attempting a full-node sync from scratch, you first have to follow the instructions in the [`genesis-ethermint`](https://github.com/GenesisL1/genesis-ethermint) repository.
+- existing mainnet nodes requiring version upgrades
 
 ---
 
@@ -91,7 +86,7 @@ echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 > [!IMPORTANT]
 > Choose **one** method and expand the '>' :
 
-### 🔹 A. Bootstrap with Provided Snapshot (Fastest; Trustfull)
+### 🔹 A. Bootstrap with Provided Snapshot (Fastest; Trustful)
 
 <details>
 <summary> Quick-Sync from provided `data` backup </summary>
@@ -163,7 +158,7 @@ mv genesis_backup_20250505/* ~/.genesis/
 ```bash
 git clone https://github.com/GenesisL1/genesis-crypto.git
 cd genesis-crypto
-git checkout v1.0.0
+git checkout v1.1.1
 ```
 
 > [!IMPORTANT]
@@ -181,16 +176,22 @@ sh setup/state-sync.sh <moniker>
 </details>
 
 
-### 🔹 C. Upgrade from `genesis-ethermint` (Trustless)
+### 🔹 C. Upgrade Existing Node (Trustless)
 
 <details>
-<summary>⚙️ Upgrade an ethermint Node synced from scratch </summary>
+<summary>⚙️ Upgrade an existing node to the latest network version </summary>
 
-> ⚠️ **Legacy Node Warning:**
-> If you're attempting a full-node sync from scratch, follow the instructions in the  (repo: [`genesis-ethermint`](https://github.com/GenesisL1/genesis-ethermint)) and the node synced till height: `7400000` which caused it to panic.
->
+Upgrading your node happens in phases. Your node will auto-halt whenever it is at a point where an upgrade is required. See the table below:
 
-Then to upgrade to the new **mainnet** (`genesis_29-2`):
+| Plan Name    | Halt height               | Version to upgrade to |
+|-------------|----------------------------|------------------------|
+| plan_crypto | 7,400,000 (legacy node)    | v1.0.0                |
+| v1.1.1      | TBA                        | v1.1.1                |
+
+You're only required to use the upgrade.sh script every time an upgrade is needed, but make sure the following conditions match:
+- node auto-halted (!) at a specific plan/height
+- you checked out the corresponding release version (e.g. for plan_crypto: `git checkout v1.0.0`)
+- you're using the script from that same release (the upgrade.sh script is release-dependent)
 
 ```bash
 sh setup/upgrade.sh
