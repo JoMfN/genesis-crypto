@@ -66,34 +66,6 @@ sh setup/quick-sync.sh <moniker>
 >
 > **IMPORTANT:** currently, snapshots must be bootstrapped manually. Please refer to the main [README](/README.md) for further instructions.
 
-## state-sync.sh
-
-> [!CAUTION]
-> Running this will **wipe the entire database** (the _/data_-folder **excluding** the priv_validator_state.json file).
-> 
-> Make a backup if needed: [utils/backup/create.sh](/utils/backup/create.sh).
-
-This script takes care of the needed steps to join the network via State Sync:
-
-- It stops the service (if it exists)
-- Installs all the necessary dependencies
-- Builds the binaries
-- Initializes the node
-- Resets config files
-- Fetches latest seeds and peers
-- Fetches `genesis.json`-file
-- Fetches RPC servers
-- Recalibrates **[statesync]** settings to a recent height (**default:** `<latest_height>` - `2000`)
-
-### Usage
-
-```
-sh setup/state-sync.sh <moniker>
-```
-> If you wish to change the default _[height_interval]_ of `2000`, run [utils/tools/restate-sync.sh](/utils/tools/restate-sync.sh) _[height_interval]_ yourself _after_ having run _setup/state-sync.sh_; see [utils/README.md](/utils) for more information.
->
-> If you can't access the `genesisd` command afterwards, execute the `. ~/.bashrc` _or_ `source ~/.bashrc` command in your terminal.
-
 ## create-validator.sh
 
 > [!IMPORTANT]
