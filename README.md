@@ -25,7 +25,7 @@
 Due to the recent on-chain minting of the full Protein Data Bank (PDB), the size of the GenesisL1 blockchain has increased significantly. This data-heavy event resulted in a substantial boost to storage requirements and syncing time. To address this, the GenesisL1 community provides multiple streamlined methods to get a node up and running quickly — including a bootstrapped `data` folder backup that allows syncing within hours instead of several days.
 
 > ⚠️ **IMPORTANT:**
-> In **Step 2**, you will need to do **both setup methods**: Option A and B. Follow **A** first — Generation of a working up-to-sync v1.0.0 genesis-crypto node, then upgrade to v1.1.1
+> In **Step 2**, you will need to choone **one setup methods**: Option A or B.
 
 This repository is intended for those who want to join the Cronos-fork **mainnet**: `genesis_29-2`, using one of the following paths:
 
@@ -36,9 +36,9 @@ Use a fully synced >650GB `data` folder provided by the community.
 Upgrade an existing node to the latest network version.
 
 This option applies to:
+- existing mainnet nodes requiring version upgrades
 - legacy nodes based on `genesis-ethermint`
   > We were an Evmos-fork before deciding to hard fork to Cronos. If you're attempting a full-node sync from scratch, you first have to follow the instructions in the [`genesis-ethermint`](https://github.com/GenesisL1/genesis-ethermint) repository.
-- existing mainnet nodes requiring version upgrades
 
 ---
 
@@ -81,7 +81,7 @@ echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 ## 2. 🛠️ Node Setup Options
 
 > [!IMPORTANT]
-> Do **one** method at the time, first A next B and expand the '>' :
+> Choose **one** method and expand the '>' :
 
 ### 🔹 A. Bootstrap with Provided Snapshot (Fastest; Trustful)
 
@@ -109,7 +109,7 @@ setup the github repo.
 ```bash
 git clone https://github.com/GenesisL1/genesis-crypto.git
 cd genesis-crypto
-git checkout v1.0.0
+git checkout v1.1.1
 ```
 
 create a `.genesis` folder with your config in the meanwhile.
@@ -155,7 +155,7 @@ Upgrading your node happens in phases. Your node will auto-halt whenever it is a
 | Plan Name    | Halt height               | Version to upgrade to |
 |-------------|----------------------------|------------------------|
 | plan_crypto | 7,400,000 (legacy node)    | v1.0.0                |
-| v1.1.1      | TBA                        | v1.1.1                |
+| v1.1.1      | 12,996,000                 | v1.1.1                |
 
 You're only required to use the upgrade.sh script every time an upgrade is needed, but make sure the following conditions match:
 - node auto-halted (!) at a specific plan/height
@@ -166,7 +166,7 @@ You're only required to use the upgrade.sh script every time an upgrade is neede
 # cd ~
 # git clone https://github.com/GenesisL1/genesis-crypto.git # only required for plan_crypto update assuming existing `/genesis-crypto` folder if planning upgrade `v1.0.0` to `v1.1.1` 
 cd ~/genesis-crypto
-git checkout v1.1.1
+git checkout <version to upgrade to>
 ```
 
 ```bash
