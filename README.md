@@ -25,17 +25,14 @@
 Due to the recent on-chain minting of the full Protein Data Bank (PDB), the size of the GenesisL1 blockchain has increased significantly. This data-heavy event resulted in a substantial boost to storage requirements and syncing time. To address this, the GenesisL1 community provides multiple streamlined methods to get a node up and running quickly — including a bootstrapped `data` folder backup that allows syncing within hours instead of several days.
 
 > ⚠️ **IMPORTANT:**
-> In **Step 2**, you will need to choose **one setup method**: Option A, B, or C. Only follow **one** of these — copying all three will cause your setup to fail.
+> In **Step 2**, you will need to do **both setup methods**: Option A and B. Follow **A** first — Generation of a working up-to-sync v1.0.0 genesis-crypto node, then upgrade to v1.1.1
 
 This repository is intended for those who want to join the Cronos-fork **mainnet**: `genesis_29-2`, using one of the following paths:
 
 ### 🔹 OPTION A: Bootstrapped Snapshot (Fastest Setup)
-Use a fully synced 622GB `data` folder provided by the community, compressed to ~543GB.
+Use a fully synced >650GB `data` folder provided by the community.
 
-### 🔹 OPTION B: State Sync Setup (Recommended for New Nodes)
-Sync your node from a trusted block height using the built-in **state sync** mechanism.
-
-### 🔹 OPTION C: Upgrade Existing Node
+### 🔹 OPTION B: Upgrade Existing Node
 Upgrade an existing node to the latest network version.
 
 This option applies to:
@@ -60,7 +57,7 @@ Debian based OS
 
 ```bash
 sudo apt update && sudo apt upgrade -y
-sudo apt install curl tar wget build-essential git make gcc liblz4-tool htop unzip -y
+sudo apt install curl tar wget build-essential git make gcc liblz4-tool htop unzip jq ca-certificates rsync lz4 pv -y
 ```
 
 ### 💡 Enable Swap (Optional but Recommended)
@@ -84,7 +81,7 @@ echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 ## 2. 🛠️ Node Setup Options
 
 > [!IMPORTANT]
-> Choose **one** method and expand the '>' :
+> Do **one** method at the time, first A next B and expand the '>' :
 
 ### 🔹 A. Bootstrap with Provided Snapshot (Fastest; Trustful)
 
@@ -93,14 +90,16 @@ echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 
 ```bash
 cd ~
-wget https://ftp.basementnodes.ca/genesis_backup_20250407082420.tar.lz4
+wget https://ftp.basementnodes.ca/snapshots/gl1/data.tar.lz4
 ```
 
-If this one is currently unavailable try the following
+If this one is currently unavailable try checking out [`LCserve up to date snapshots`](https://lcserve.zip)
+
+and replace URL and data_<BLOCK_HEIGHT> below in correspondance with the snapshot. 
 
 ```bash
 cd ~
-wget http://85.122.195.176:55865/genesis_backup_20250505.tar.gz
+wget http://85.122.195.176:<Port>/data_<BLOCK_HEIGHT>.tar.lz4
 ```
 
 let the download finish and grab a coffee. 
@@ -108,8 +107,9 @@ let the download finish and grab a coffee.
 setup the github repo.
 
 ```bash
-git clone https://github.com/JoMfN/genesis-crypto.git
+git clone https://github.com/GenesisL1/genesis-crypto.git
 cd genesis-crypto
+git checkout v1.0.0
 ```
 
 create a `.genesis` folder with your config in the meanwhile.
@@ -122,61 +122,30 @@ Follow the instructions in the terminal.
 
 check if a .genesis folder was generated.
 
+remove any existing data folder.
+
+```bash
+rm -r ~/.genesis/data
+```
+
 unzip the fully downloaded `data` folder 
 
 ```bash
-lz4 -d genesis_backup_20250407082420.tar.lz4 | tar -xvf -
+lz4 -d data.tar.lz4 | tar -xvf - -C $HOME/.genesis
 ```
 
-If you downloaded the .tar.gz file instead:
+Improvement: Stream data folder from server directly into $HOME/.genesis/
 
 ```bash
-tar -xvzf genesis_backup_20250505.tar.gz
-```
-
-replace it with the one existing in `~/.genesis/data`
-
-```bash
-mv genesis_backup_20250407082420/* ~/.genesis/
-```
-
-If you downloaded the .tar.gz file instead:
-
-```bash
-mv genesis_backup_20250505/* ~/.genesis/
+wget -qO- https://ftp.basementnodes.ca/snapshots/gl1/data.tar.lz4 | pv | lz4 -d | tar -xvf - -C $HOME/.genesis
 ```
 
 > ⚠️ Ensure `genesisd` is not running before replacing `.genesis`
 
 </details>
 
-### 🔹 B. State Sync from Recent Height (Trusted)
 
-<details>
-<summary> Setup a node _(using state sync)_ from a snapshot </summary>
-
-```bash
-git clone https://github.com/GenesisL1/genesis-crypto.git
-cd genesis-crypto
-git checkout v1.1.1
-```
-
-> [!IMPORTANT]
-> Running this will **wipe the entire database** (the _/data_-folder **excluding** the priv_validator_state.json file). Therefore if you already have a node set up and you prefer not to have your GenesisL1 database lost, create a backup.
->
-> You could use [utils/backup/create.sh](/utils/backup/create.sh) for this.
->
-
-```bash
-sh setup/state-sync.sh <moniker>
-```
-
-> 💡 This method will auto-install `genesisd` and dependencies
-
-</details>
-
-
-### 🔹 C. Upgrade Existing Node (Trustless)
+### 🔹 B. Upgrade Existing Node (Trustless)
 
 <details>
 <summary>⚙️ Upgrade an existing node to the latest network version </summary>
@@ -192,6 +161,13 @@ You're only required to use the upgrade.sh script every time an upgrade is neede
 - node auto-halted (!) at a specific plan/height
 - you checked out the corresponding release version (e.g. for plan_crypto: `git checkout v1.0.0`)
 - you're using the script from that same release (the upgrade.sh script is release-dependent)
+
+```bash
+# cd ~
+# git clone https://github.com/GenesisL1/genesis-crypto.git # only required for plan_crypto update assuming existing `/genesis-crypto` folder if planning upgrade `v1.0.0` to `v1.1.1` 
+cd ~/genesis-crypto
+git checkout v1.1.1
+```
 
 ```bash
 sh setup/upgrade.sh
@@ -226,7 +202,7 @@ genesisd start --log_level warn
 **For AMD:**
 
 ```bash
-ver="1.22.12"
+ver="1.24.13"
 wget "https://golang.org/dl/go$ver.linux-amd64.tar.gz"
 sudo rm -rf /usr/local/go
 sudo tar -C /usr/local -xzf "go$ver.linux-amd64.tar.gz"
@@ -239,10 +215,10 @@ go version
 **For ARM (Raspberry Pi 5):**
 
 ```bash
-wget https://go.dev/dl/go1.22.12.linux-arm64.tar.gz 
+wget https://go.dev/dl/go1.24.13.linux-arm64.tar.gz 
 sudo rm -rf /usr/local/go
-sudo tar -C /usr/local -xzf "go1.22.12.linux-arm64.tar.gz"
-rm "go1.22.12.linux-arm64.tar.gz"
+sudo tar -C /usr/local -xzf "go1.24.13.linux-arm64.tar.gz"
+rm "go1.24.13.linux-arm64.tar.gz"
 echo "export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin" >> $HOME/.bash_profile
 source $HOME/.bash_profile
 go version
@@ -329,11 +305,17 @@ This can be automized by installing it as a service checkout the details below.
 <details>
 <summary>🖥️ Systemd Service Setup</summary>
 
+Check first
+
+```bash
+echo $USER
+```
+
 ```bash
 sudo nano /etc/systemd/system/genesisd.service
 ```
 
-Paste this:
+Paste this but for optimal compatibility, change $USER with your username:
 
 ```
 [Unit]
@@ -444,7 +426,11 @@ Useful links presented below
 >
 > [`MolNFT App`](https://app.molnft.org/)
 >
-> [`Anode team node installation guide`](https://anode.team/GenesisL1)
+> [`GL1F App`](https://gl1f.com/)
+>
+> [`CIPNFT App`](https://cipnft.com/)
+>  
+> [`genesisl1 dApps overview`](https://genesisl1.com/dapps.html)
 >
 > [`starv-team node installation guide`](https://stavr-team.gitbook.io/nodes-guides/mainnets/genesisl1/node-installation)
 >
