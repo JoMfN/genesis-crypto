@@ -129,14 +129,6 @@
       }
     },
     {
-      "url": "./tmp-swagger-gen/cosmos/authz/v1beta1/query.swagger.json",
-      "operationIds": {
-        "rename": {
-          "Params": "AuthzParams"
-        }
-      }
-    },
-    {
       "url": "./tmp-swagger-gen/cosmos/feegrant/v1beta1/query.swagger.json",
       "operationIds": {
         "rename": {
@@ -169,6 +161,22 @@
       "operationIds": {
         "rename": {
           "Params": "TransferParams"
+        }
+      }
+    },
+    {
+      "url": "./tmp-swagger-gen/ibc/applications/interchain_accounts/controller/v1/query.swagger.json",
+      "operationIds": {
+        "rename": {
+          "Params": "InterchainAccountsControllerParams"
+        }
+      }
+    },
+    {
+      "url": "./tmp-swagger-gen/icaauth/v1/query.swagger.json",
+      "operationIds": {
+        "rename": {
+          "Params": "IcaauthParams"
         }
       }
     }

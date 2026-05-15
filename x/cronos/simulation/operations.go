@@ -5,17 +5,17 @@ import (
 	"math/rand"
 
 	errorsmod "cosmossdk.io/errors"
+	simappparams "cosmossdk.io/simapp/params"
 	"github.com/cosmos/cosmos-sdk/baseapp"
 	"github.com/cosmos/cosmos-sdk/codec"
-	simappparams "github.com/cosmos/cosmos-sdk/simapp/params"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 	simtypes "github.com/cosmos/cosmos-sdk/types/simulation"
 	"github.com/cosmos/cosmos-sdk/x/simulation"
 	"github.com/ethereum/go-ethereum/common"
 
-	"github.com/crypto-org-chain/cronos/x/cronos/keeper"
-	"github.com/crypto-org-chain/cronos/x/cronos/types"
+	"github.com/crypto-org-chain/cronos/v2/x/cronos/keeper"
+	"github.com/crypto-org-chain/cronos/v2/x/cronos/types"
 )
 
 const (
@@ -91,7 +91,7 @@ func SimulateUpdateTokenMapping(ak types.AccountKeeper, bk types.BankKeeper, k *
 		}
 
 		oper, ops, err := simulation.GenAndDeliverTxWithRandFees(txCtx)
-		if simAccount.Address.String() != cronosAdmin && errors.Is(err, errorsmod.Wrap(sdkerrors.ErrInvalidAddress, "msg sender is authorized")) {
+		if simAccount.Address.String() != cronosAdmin && errors.Is(err, errorsmod.Wrap(sdkerrors.ErrUnauthorized, "msg sender is not authorized")) {
 			return simtypes.NoOpMsg(types.ModuleName, msg.Type(), "unauthorized tx should fail"), nil, nil
 		}
 		return oper, ops, err

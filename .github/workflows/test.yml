@@ -1,5 +1,6 @@
 name: integration tests
 on:
+  merge_group:
   pull_request:
   push:
     branches:
@@ -18,7 +19,7 @@ jobs:
     timeout-minutes: 240
     strategy:
       matrix:
-        tests: [unmarked, ibc, ibc_timeout, ibc_update_client, upgrade, slow]
+        tests: [unmarked, ibc, ibc_rly_evm, ibc_rly_gas, ibc_timeout, ibc_update_client, ica, gov, upgrade, slow, gas]
     env:
       TESTS_TO_RUN: ${{ matrix.tests }}
     steps:
@@ -26,17 +27,14 @@ jobs:
         with:
           fetch-depth: 0
       - id: changed-files
-        uses: tj-actions/changed-files@v34
+        uses: tj-actions/changed-files@v41
         with:
           files: |
             docs
             *.md
             **/*.md
-      - uses: cachix/install-nix-action@v22
+      - uses: cachix/install-nix-action@v23
         with:
-          # pin to nix-2.13 to workaround compability issue of 2.14,
-          # see: https://github.com/cachix/install-nix-action/issues/161
-          install_url: https://releases.nixos.org/nix/nix-2.13.3/install
           nix_path: nixpkgs=channel:nixos-22.11
           extra_nix_config: |
             access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
@@ -61,6 +59,18 @@ jobs:
           name: debug-files
           path: debug_files.tar.gz
           if-no-files-found: ignore
+      - name: Convert coverage data
+        if: steps.changed-files.outputs.only_changed == 'false'
+        run: |
+          nix profile install ./nix#go_1_22
+          go tool covdata textfmt -i=integration_tests/coverage -o profile.txt
+      - name: Upload coverage report
+        if: steps.changed-files.outputs.only_changed == 'false'
+        uses: codecov/codecov-action@v3
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          file: ./profile.txt
+          flags: integration_tests
 
   upload-cache:
     if: github.event_name == 'push'
@@ -74,17 +84,14 @@ jobs:
         with:
           fetch-depth: 0
       - id: changed-files
-        uses: tj-actions/changed-files@v34
+        uses: tj-actions/changed-files@v41
         with:
           files: |
             docs
             *.md
             **/*.md
-      - uses: cachix/install-nix-action@v22
+      - uses: cachix/install-nix-action@v23
         with:
-          # pin to nix-2.13 to workaround compability issue of 2.14,
-          # see: https://github.com/cachix/install-nix-action/issues/161
-          install_url: https://releases.nixos.org/nix/nix-2.13.3/install
           nix_path: nixpkgs=channel:nixos-22.11
           extra_nix_config: |
             access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}

@@ -6,9 +6,11 @@ import (
 	"math/big"
 	"strings"
 
+	"github.com/cometbft/cometbft/libs/log"
+	coretypes "github.com/cometbft/cometbft/rpc/core/types"
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/server"
-	"github.com/crypto-org-chain/cronos/x/cronos/types"
+	"github.com/crypto-org-chain/cronos/v2/x/cronos/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
@@ -20,8 +22,6 @@ import (
 	rpctypes "github.com/evmos/ethermint/rpc/types"
 	ethermint "github.com/evmos/ethermint/types"
 	evmtypes "github.com/evmos/ethermint/x/evm/types"
-	"github.com/tendermint/tendermint/libs/log"
-	coretypes "github.com/tendermint/tendermint/rpc/core/types"
 )
 
 const (
@@ -175,12 +175,12 @@ func (api *CronosAPI) GetTransactionReceiptsByBlock(blockNrOrHash rpctypes.Block
 				status = hexutil.Uint(ethtypes.ReceiptStatusSuccessful)
 			}
 
-			from, err := ethMsg.GetSender(api.chainIDEpoch)
+			from, err := ethMsg.GetSenderLegacy(api.chainIDEpoch)
 			if err != nil {
 				return nil, err
 			}
 
-			logs, err := backend.TxLogsFromEvents(txResult.Events, parsedTx.MsgIndex)
+			logs, err := evmtypes.DecodeMsgLogsFromEvents(txResult.Data, parsedTx.MsgIndex, uint64(blockRes.Height))
 			if err != nil {
 				api.logger.Debug("failed to parse logs", "block", resBlock.Block.Height, "txIndex", txIndex, "msgIndex", msgIndex, "error", err.Error())
 			}
@@ -211,6 +211,7 @@ func (api *CronosAPI) GetTransactionReceiptsByBlock(blockNrOrHash rpctypes.Block
 				// sender and receiver (contract or EOA) addreses
 				"from": from,
 				"to":   txData.GetTo(),
+				"type": hexutil.Uint(ethMsg.AsTransaction().Type()),
 			}
 
 			// If the to is empty, assume it is a contract creation
@@ -312,7 +313,7 @@ func (api *CronosAPI) ReplayBlock(blockNrOrHash rpctypes.BlockNumberOrHash, post
 			status = hexutil.Uint(ethtypes.ReceiptStatusSuccessful)
 		}
 
-		from, err := ethMsg.GetSender(api.chainIDEpoch)
+		from, err := ethMsg.GetSenderLegacy(api.chainIDEpoch)
 		if err != nil {
 			return nil, err
 		}

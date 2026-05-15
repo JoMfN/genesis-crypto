@@ -1,101 +1,174 @@
 package app
 
 import (
-  "fmt"
+	"fmt"
 
-  sdkmath "cosmossdk.io/math"
-  sdk "github.com/cosmos/cosmos-sdk/types"
-  "github.com/cosmos/cosmos-sdk/types/module"
-  feemarketkeeper "github.com/evmos/ethermint/x/feemarket/keeper"
-  evmkeeper "github.com/evmos/ethermint/x/evm/keeper"
-  storetypes "github.com/cosmos/cosmos-sdk/store/types"
-  upgradetypes "github.com/cosmos/cosmos-sdk/x/upgrade/types"
-  ibcfeetypes "github.com/cosmos/ibc-go/v5/modules/apps/29-fee/types"
-  cronostypes "github.com/crypto-org-chain/cronos/x/cronos/types"
+	"github.com/cosmos/cosmos-sdk/baseapp"
+	"github.com/cosmos/cosmos-sdk/codec"
+	storetypes "github.com/cosmos/cosmos-sdk/store/types"
+	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/cosmos/cosmos-sdk/types/module"
+	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
+	authzkeeper "github.com/cosmos/cosmos-sdk/x/authz/keeper"
+	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
+	consensusparamtypes "github.com/cosmos/cosmos-sdk/x/consensus/types"
+	crisistypes "github.com/cosmos/cosmos-sdk/x/crisis/types"
+	distrtypes "github.com/cosmos/cosmos-sdk/x/distribution/types"
+	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
+	govv1 "github.com/cosmos/cosmos-sdk/x/gov/types/v1"
+	minttypes "github.com/cosmos/cosmos-sdk/x/mint/types"
+	paramstypes "github.com/cosmos/cosmos-sdk/x/params/types"
+	slashingtypes "github.com/cosmos/cosmos-sdk/x/slashing/types"
+	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
+	upgradetypes "github.com/cosmos/cosmos-sdk/x/upgrade/types"
+	ica "github.com/cosmos/ibc-go/v7/modules/apps/27-interchain-accounts"
+	icacontrollertypes "github.com/cosmos/ibc-go/v7/modules/apps/27-interchain-accounts/controller/types"
+	icahosttypes "github.com/cosmos/ibc-go/v7/modules/apps/27-interchain-accounts/host/types"
+	icatypes "github.com/cosmos/ibc-go/v7/modules/apps/27-interchain-accounts/types"
+	ibctransfertypes "github.com/cosmos/ibc-go/v7/modules/apps/transfer/types"
+	clientkeeper "github.com/cosmos/ibc-go/v7/modules/core/02-client/keeper"
+	"github.com/cosmos/ibc-go/v7/modules/core/exported"
+	ibctmmigrations "github.com/cosmos/ibc-go/v7/modules/light-clients/07-tendermint/migrations"
+
+	cronostypes "github.com/crypto-org-chain/cronos/v2/x/cronos/types"
+	icaauthtypes "github.com/crypto-org-chain/cronos/v2/x/icaauth/types"
+
+	v0evmtypes "github.com/evmos/ethermint/x/evm/migrations/v0/types"
+	evmtypes "github.com/evmos/ethermint/x/evm/types"
+	feemarkettypes "github.com/evmos/ethermint/x/feemarket/types"
 )
 
-type UpgradeInfo struct {
-  Name    string
-  Info    string
-  Handler func(ctx sdk.Context, _ upgradetypes.Plan, fromVM module.VersionMap) (module.VersionMap, error)
-}
+func (app *App) RegisterUpgradeHandlers(cdc codec.BinaryCodec, clientKeeper clientkeeper.Keeper) {
+	planName := "v1.1.1"
 
-// This is the fork upgrade to Cronos binaries
-func UpgradeV1(
-  mm *module.Manager,
-  configurator module.Configurator,
-  fm feemarketkeeper.Keeper,
-  evm *evmkeeper.Keeper,
-) UpgradeInfo {
-  return UpgradeInfo{
-    Name: "plan_crypto",
-    Info: `'{"binaries":{"darwin/amd64":"","darwin/x86_64":"","linux/arm64":"","linux/amd64":"","windows/x86_64":""}}'`,
-    Handler: func(ctx sdk.Context, _ upgradetypes.Plan, fromVM module.VersionMap) (module.VersionMap, error) {
-      m, err := mm.RunMigrations(ctx, configurator, fromVM)
-      if err != nil {
-        return m, err
-      }
-  
-      // Override feemarket parameters
-      fmParams := fm.GetParams(ctx)
-      fmParams.BaseFeeChangeDenominator = 8
-      fmParams.ElasticityMultiplier = 2
-      fmParams.BaseFee = sdk.NewInt(50000000000)
-      fmParams.MinGasPrice = sdk.NewDec(50000000000)
-      fm.SetParams(ctx, fmParams)
-  
-      // clear extra_eips from evm parameters
-      // Ref: https://github.com/crypto-org-chain/cronos/issues/755
-      evmParams := evm.GetParams(ctx)
-      evmParams.ExtraEIPs = []int64{}
-      zero := sdkmath.ZeroInt()
-      // fix the incorrect value on testnet parameters
-      evmParams.ChainConfig.LondonBlock = &zero
-      evm.SetParams(ctx, evmParams)
+	// Set param key table for params module migration
+	for _, subspace := range app.ParamsKeeper.GetSubspaces() {
+		var keyTable paramstypes.KeyTable
+		switch subspace.Name() {
+		case authtypes.ModuleName:
+			keyTable = authtypes.ParamKeyTable() //nolint:staticcheck
+		case banktypes.ModuleName:
+			keyTable = banktypes.ParamKeyTable() //nolint:staticcheck
+		case stakingtypes.ModuleName:
+			keyTable = stakingtypes.ParamKeyTable()
+		case minttypes.ModuleName:
+			keyTable = minttypes.ParamKeyTable() //nolint:staticcheck
+		case distrtypes.ModuleName:
+			keyTable = distrtypes.ParamKeyTable() //nolint:staticcheck
+		case slashingtypes.ModuleName:
+			keyTable = slashingtypes.ParamKeyTable() //nolint:staticcheck
+		case govtypes.ModuleName:
+			keyTable = govv1.ParamKeyTable() //nolint:staticcheck
+		case crisistypes.ModuleName:
+			keyTable = crisistypes.ParamKeyTable() //nolint:staticcheck
+		case ibctransfertypes.ModuleName:
+			keyTable = ibctransfertypes.ParamKeyTable()
+		case icacontrollertypes.SubModuleName:
+			keyTable = icacontrollertypes.ParamKeyTable()
+		case icaauthtypes.ModuleName:
+			keyTable = icaauthtypes.ParamKeyTable()
+		case evmtypes.ModuleName:
+			keyTable = v0evmtypes.ParamKeyTable() //nolint:staticcheck
+		case feemarkettypes.ModuleName:
+			keyTable = feemarkettypes.ParamKeyTable()
+		case cronostypes.ModuleName:
+			keyTable = cronostypes.ParamKeyTable()
+		default:
+			continue
+		}
+		if !subspace.HasKeyTable() {
+			subspace.WithKeyTable(keyTable)
+		}
+	}
 
-      return m, nil
-    },
-  }
-}
+	baseAppLegacySS := app.ParamsKeeper.Subspace(baseapp.Paramspace).WithKeyTable(paramstypes.ConsensusParamsKeyTable())
 
-func (app *App) RegisterUpgradeHandlers(experimental bool) {
-  upgradeV1 := UpgradeV1(
-    app.mm,
-    app.configurator,
-    app.FeeMarketKeeper,
-    app.EvmKeeper,
-  )
+	app.UpgradeKeeper.SetUpgradeHandler(planName, func(ctx sdk.Context, plan upgradetypes.Plan, fromVM module.VersionMap) (module.VersionMap, error) {
+		// OPTIONAL: prune expired tendermint consensus states to save storage space
+		if _, err := ibctmmigrations.PruneExpiredConsensusStates(ctx, cdc, clientKeeper); err != nil {
+			return nil, err
+		}
 
-  app.UpgradeKeeper.SetUpgradeHandler(
-    upgradeV1.Name,
-    upgradeV1.Handler,
-  )
+		// explicitly update the IBC 02-client params, adding the localhost client type
+		params := clientKeeper.GetParams(ctx)
+		params.AllowedClients = append(params.AllowedClients, exported.Localhost)
+		clientKeeper.SetParams(ctx, params)
 
-  // When a planned update height is reached, the old binary will panic
-  // writing on disk the height and name of the update that triggered it
-  // This will read that value, and execute the preparations for the upgrade.
-  upgradeInfo, err := app.UpgradeKeeper.ReadUpgradeInfoFromDisk()
-  if err != nil {
-    panic(fmt.Errorf("failed to read upgrade info from disk: %w", err))
-  }
+		// Migrate Tendermint consensus parameters from x/params module to a dedicated x/consensus module.
+		baseapp.MigrateParams(ctx, baseAppLegacySS, &app.ConsensusParamsKeeper)
 
-  if app.UpgradeKeeper.IsSkipHeight(upgradeInfo.Height) {
-    return
-  }
+		if icaModule, ok := app.mm.Modules[icatypes.ModuleName].(ica.AppModule); ok {
+			// set the ICS27 consensus version so InitGenesis is not run
+			version := icaModule.ConsensusVersion()
+			fromVM[icatypes.ModuleName] = version
 
-  var storeUpgrades *storetypes.StoreUpgrades
+			// create ICS27 Controller submodule params
+			controllerParams := icacontrollertypes.Params{
+				ControllerEnabled: true,
+			}
 
-  switch upgradeInfo.Name {
-  case upgradeV1.Name:
-    storeUpgrades = &storetypes.StoreUpgrades{
-      Added: []string{ibcfeetypes.StoreKey, cronostypes.StoreKey},
-    }
-  default:
-    // no-op
-  }
+			// initialize ICS27 module
+			icaModule.InitModule(ctx, controllerParams, icahosttypes.Params{})
+		}
 
-  if storeUpgrades != nil {
-    // configure store loader that checks if version == upgradeHeight and applies store upgrades
-    app.SetStoreLoader(upgradetypes.UpgradeStoreLoader(upgradeInfo.Height, storeUpgrades))
-  }
+		// Helpful debug: show current value before migrations
+		pre := app.CronosKeeper.GetParams(ctx)
+		ctx.Logger().Info("pre-migration cronos params", "IbcCroDenom", pre.IbcCroDenom)
+
+		m, err := app.mm.RunMigrations(ctx, app.configurator, fromVM)
+		if err != nil {
+			return m, err
+		}
+
+		// Post-migration: ensure the param is set to a valid default (some fresh chains have it empty).
+		post := app.CronosKeeper.GetParams(ctx)
+		if post.IbcCroDenom == "" || !cronostypes.IsValidIBCDenom(post.IbcCroDenom) {
+			post.IbcCroDenom = cronostypes.IbcCroDenomDefaultValue
+			app.CronosKeeper.SetParams(ctx, post)
+			ctx.Logger().Info("post-migration cronos params fixed", "IbcCroDenom", post.IbcCroDenom)
+		} else {
+			ctx.Logger().Info("post-migration cronos params ok", "IbcCroDenom", post.IbcCroDenom)
+		}
+
+		// enlarge block gas limit
+		consParams, err := app.ConsensusParamsKeeper.Get(ctx)
+		if err != nil {
+			return m, err
+		}
+		consParams.Block.MaxGas = 60_000_000
+		app.ConsensusParamsKeeper.Set(ctx, consParams)
+
+		return m, nil
+	})
+
+	testnetPlanName := "v1.1.0-testnet-1"
+	app.UpgradeKeeper.SetUpgradeHandler(testnetPlanName, func(ctx sdk.Context, _ upgradetypes.Plan, fromVM module.VersionMap) (module.VersionMap, error) {
+		m, err := app.mm.RunMigrations(ctx, app.configurator, fromVM)
+		if err != nil {
+			return m, err
+		}
+		return m, nil
+	})
+
+	upgradeInfo, err := app.UpgradeKeeper.ReadUpgradeInfoFromDisk()
+	if err != nil {
+		panic(fmt.Sprintf("failed to read upgrade info from disk %s", err))
+	}
+
+	if !app.UpgradeKeeper.IsSkipHeight(upgradeInfo.Height) {
+		if upgradeInfo.Name == planName {
+			storeUpgrades := storetypes.StoreUpgrades{
+				Added: []string{
+					consensusparamtypes.StoreKey,
+					crisistypes.StoreKey,
+					icacontrollertypes.StoreKey,
+					icaauthtypes.StoreKey,
+				},
+				Deleted: []string{
+					authzkeeper.StoreKey,
+				},
+			}
+			app.SetStoreLoader(upgradetypes.UpgradeStoreLoader(upgradeInfo.Height, &storeUpgrades))
+		}
+	}
 }

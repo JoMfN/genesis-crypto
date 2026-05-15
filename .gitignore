@@ -1,6 +1,6 @@
 release/
 /build
-/coverage.txt
+coverage.txt
 __pycache__
 /dist
 /vendor
@@ -26,3 +26,6 @@ integration_tests/configs/*.yaml
 utils/tools/quick-shift.sh
 utils/tools/shift-wizard.sh
 utils/tools/_restate-sync.sh
+# direnv
+/.envrc
+/.direnv

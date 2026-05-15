@@ -1,6 +1,6 @@
 {
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/release-22.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
     nix-bundle-exe = {
       url = "github:3noch/nix-bundle-exe";
@@ -9,11 +9,16 @@
     gomod2nix = {
       url = "github:nix-community/gomod2nix";
       inputs.nixpkgs.follows = "nixpkgs";
-      inputs.utils.follows = "flake-utils";
+      inputs.flake-utils.follows = "flake-utils";
+    };
+    poetry2nix = {
+      url = "github:nix-community/poetry2nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.flake-utils.follows = "flake-utils";
     };
   };
 
-  outputs = { self, nixpkgs, nix-bundle-exe, gomod2nix, flake-utils }:
+  outputs = { self, nixpkgs, nix-bundle-exe, gomod2nix, flake-utils, poetry2nix }:
     let
       rev = self.shortRev or "dirty";
       mkApp = drv: {
@@ -28,6 +33,7 @@
             inherit system;
             overlays = [
               (import ./nix/build_overlay.nix)
+              poetry2nix.overlays.default
               gomod2nix.overlays.default
               self.overlay
             ];
@@ -35,7 +41,7 @@
           };
         in
         rec {
-          packages = pkgs.genesis-matrix // {
+          packages = pkgs.cronos-matrix // {
             inherit (pkgs) rocksdb;
           };
           apps = {
@@ -45,20 +51,35 @@
           defaultPackage = packages.genesisd;
           defaultApp = apps.genesisd;
           devShells = {
-            genesisd = pkgs.mkShell {
-              buildInputs = with pkgs; [
-                go_1_20
-                rocksdb
-                gomod2nix
+            default = pkgs.mkShell {
+              buildInputs = [
+                defaultPackage.go
+                pkgs.gomod2nix
+              ];
+            };
+            rocksdb = pkgs.mkShell {
+              buildInputs = [
+                defaultPackage.go
+                pkgs.gomod2nix
+                pkgs.rocksdb
+              ];
+            };
+            full = pkgs.mkShell {
+              buildInputs = [
+                defaultPackage.go
+                pkgs.gomod2nix
+                pkgs.rocksdb
+                pkgs.test-env
               ];
             };
           };
-          devShell = devShells.genesisd;
           legacyPackages = pkgs;
         }
       )
     ) // {
       overlay = final: super: {
+        go = super.go_1_22;
+        test-env = final.callPackage ./nix/testenv.nix { };
         bundle-exe = final.pkgsBuildBuild.callPackage nix-bundle-exe { };
         # make-tarball don't follow symbolic links to avoid duplicate file, the bundle should have no external references.
         # reset the ownership and permissions to make the extract result more normal.
@@ -70,7 +91,7 @@
             --owner=0 --group=0 --mode=u+rw,uga+r --hard-dereference . \
             | gzip -9 > $out
         '';
-        bundle-win-exe = drv: final.callPackage ./nix/bundle-win-exe.nix { genesisd = drv; };
+        bundle-win-exe = drv: final.callPackage ./nix/bundle-win-exe.nix { cronosd = drv; };
       } // (with final;
         let
           matrix = lib.cartesianProductOfSets {
@@ -110,7 +131,7 @@
           );
         in
         {
-          genesis-matrix = binaries;
+          cronos-matrix = binaries;
         }
       );
     };

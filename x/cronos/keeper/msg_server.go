@@ -3,10 +3,11 @@ package keeper
 import (
 	"context"
 
-	errorsmod "cosmossdk.io/errors"
+	"cosmossdk.io/errors"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
-	"github.com/crypto-org-chain/cronos/x/cronos/types"
+	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
+	"github.com/crypto-org-chain/cronos/v2/x/cronos/types"
 )
 
 type msgServer struct {
@@ -43,7 +44,9 @@ func (k msgServer) ConvertVouchers(goCtx context.Context, msg *types.MsgConvertV
 
 func (k msgServer) TransferTokens(goCtx context.Context, msg *types.MsgTransferTokens) (*types.MsgTransferTokensResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
-	err := k.IbcTransferCoins(ctx, msg.From, msg.To, msg.Coins)
+	// TODO change the msg to be able to specify the channel id
+	// Only sending non source token is supported at the moment
+	err := k.IbcTransferCoins(ctx, msg.From, msg.To, msg.Coins, "")
 	if err != nil {
 		return nil, err
 	}
@@ -63,14 +66,60 @@ func (k msgServer) TransferTokens(goCtx context.Context, msg *types.MsgTransferT
 // UpdateTokenMapping implements the grpc method
 func (k msgServer) UpdateTokenMapping(goCtx context.Context, msg *types.MsgUpdateTokenMapping) (*types.MsgUpdateTokenMappingResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
-	admin := k.Keeper.GetParams(ctx).CronosAdmin
-	// if admin is empty, no sender could be equal to it
-	if admin != msg.Sender {
-		return nil, errorsmod.Wrap(sdkerrors.ErrInvalidAddress, "msg sender is authorized")
+
+	// check permission
+	if !k.Keeper.HasPermission(ctx, msg.GetSigners(), CanChangeTokenMapping) {
+		return nil, errors.Wrap(sdkerrors.ErrUnauthorized, "msg sender is not authorized")
 	}
+
 	// msg is already validated
 	if err := k.Keeper.RegisterOrUpdateTokenMapping(ctx, msg); err != nil {
 		return nil, err
 	}
 	return &types.MsgUpdateTokenMappingResponse{}, nil
+}
+
+// TurnBridge implements the grpc method
+func (k msgServer) TurnBridge(goCtx context.Context, msg *types.MsgTurnBridge) (*types.MsgTurnBridgeResponse, error) {
+	ctx := sdk.UnwrapSDKContext(goCtx)
+
+	// check permission
+	if !k.Keeper.HasPermission(ctx, msg.GetSigners(), CanTurnBridge) {
+		return nil, errors.Wrap(sdkerrors.ErrUnauthorized, "msg sender is not authorized")
+	}
+
+	gravityParams := k.gravityKeeper.GetParams(ctx)
+	gravityParams.BridgeActive = msg.Enable
+	k.gravityKeeper.SetParams(ctx, gravityParams)
+
+	return &types.MsgTurnBridgeResponse{}, nil
+}
+
+func (k msgServer) UpdateParams(goCtx context.Context, msg *types.MsgUpdateParams) (*types.MsgUpdateParamsResponse, error) {
+	if msg.Authority != k.authority {
+		return nil, errors.Wrapf(govtypes.ErrInvalidSigner, "invalid authority; expected %s, got %s", k.authority, msg.Authority)
+	}
+
+	ctx := sdk.UnwrapSDKContext(goCtx)
+	if err := k.SetParams(ctx, msg.Params); err != nil {
+		return nil, err
+	}
+
+	return &types.MsgUpdateParamsResponse{}, nil
+}
+
+func (k msgServer) UpdatePermissions(goCtx context.Context, msg *types.MsgUpdatePermissions) (*types.MsgUpdatePermissionsResponse, error) {
+	ctx := sdk.UnwrapSDKContext(goCtx)
+	admin := k.Keeper.GetParams(ctx).CronosAdmin
+	// if admin is empty, no sender could be equal to it
+	if admin != msg.From {
+		return nil, errors.Wrap(sdkerrors.ErrUnauthorized, "msg sender is not authorized")
+	}
+	acc, err := sdk.AccAddressFromBech32(msg.Address)
+	if err != nil {
+		return nil, err
+	}
+	k.SetPermissions(ctx, acc, msg.Permissions)
+
+	return &types.MsgUpdatePermissionsResponse{}, nil
 }
