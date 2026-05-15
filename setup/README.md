@@ -41,6 +41,42 @@ This version of the script takes care of the following:
 sh setup/migrate-configs.sh <config_toml_path> <app_toml_path>
 ```
 
+## staged-upgrade.sh
+
+> [!WARNING]
+> This script is release-dependent. Use the correct upgrade name, version, height and commit for the target release.
+>
+
+This script prepares the upgrade before the chain reaches the upgrade height, then applies it automatically after the node halts.
+
+This version of the script takes care of the following to upgrade your node:
+
+- Clones the required upgrade version while the old node is still running
+- Checks out the configured upgrade tag or commit
+- Builds the new `genesisd` binary in a separate staging directory
+- Waits until the configured upgrade height is reached and the node halts
+- Stops the node service
+- Creates a backup of important validator files and configs
+- Calls [migrate-configs.sh](/setup/migrate-configs.sh) to migrate your app.toml and config.toml files
+- Replaces the old binary with the pre-built upgraded binary
+- Starts the node service again
+
+### Usage
+
+```
+UPGRADE_NAME=v1.1.1 \
+UPGRADE_REF=v1.1.1 \
+UPGRADE_HEIGHT=13000000 \
+EXPECTED_COMMIT=bab909493ad4f56828b5ee30c21c97219fbb93c1 \
+sh setup/staged-upgrade.sh
+```
+
+> The script does **not** replace the running binary before the upgrade height.
+>
+> It only prepares the new binary in advance, then installs it after the node has halted for the upgrade.
+>
+> It is recommended to run this script inside `tmux` or `screen`, so it keeps running if your SSH session disconnects.
+
 ## quick-sync.sh
 
 > [!CAUTION]
