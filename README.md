@@ -155,7 +155,7 @@ Upgrading your node happens in phases. Your node will auto-halt whenever it is a
 | Plan Name    | Halt height               | Version to upgrade to |
 |-------------|----------------------------|------------------------|
 | plan_crypto | 7,400,000 (legacy node)    | v1.0.0                |
-| v1.1.1      | 12,996,000                 | v1.1.1                |
+| v1.1.1      | 13,000,000                 | v1.1.1                |
 
 You're only required to use the upgrade.sh script every time an upgrade is needed, but make sure the following conditions match:
 - node auto-halted (!) at a specific plan/height
