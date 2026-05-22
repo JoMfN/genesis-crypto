@@ -6,15 +6,20 @@ import (
 	"math/big"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	"github.com/crypto-org-chain/cronos/app"
-	cronosmodulekeeper "github.com/crypto-org-chain/cronos/x/cronos/keeper"
-	keepertest "github.com/crypto-org-chain/cronos/x/cronos/keeper/mock"
-	"github.com/crypto-org-chain/cronos/x/cronos/types"
+	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
+	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
+	"github.com/crypto-org-chain/cronos/v2/app"
+	cronosmodulekeeper "github.com/crypto-org-chain/cronos/v2/x/cronos/keeper"
+	keepertest "github.com/crypto-org-chain/cronos/v2/x/cronos/keeper/mock"
+	"github.com/crypto-org-chain/cronos/v2/x/cronos/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/evmos/ethermint/crypto/ethsecp256k1"
 )
 
-const CorrectIbcDenom = "ibc/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+const (
+	CorrectIbcDenom    = "ibc/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+	CorrectCronosDenom = "cronos0xc1b37f2abdb778f540fa5db8e1fd2eadfc9a05ed"
+)
 
 func (suite *KeeperTestSuite) TestConvertVouchersToEvmCoins() {
 	privKey, err := ethsecp256k1.GenerateKey()
@@ -58,7 +63,7 @@ func (suite *KeeperTestSuite) TestConvertVouchersToEvmCoins() {
 			address.String(),
 			sdk.NewCoins(sdk.NewCoin(types.IbcCroDenomDefaultValue, sdk.NewInt(123))),
 			func() {},
-			errors.New("0ibc/6B5A664BF0AF4F71B2F0BAA33141E2F1321242FBD5D19762F541EC971ACB0865 is smaller than 123ibc/6B5A664BF0AF4F71B2F0BAA33141E2F1321242FBD5D19762F541EC971ACB0865: insufficient funds"),
+			errors.New("spendable balance  is smaller than 123ibc/6B5A664BF0AF4F71B2F0BAA33141E2F1321242FBD5D19762F541EC971ACB0865: insufficient funds"),
 			func() {},
 		},
 		{
@@ -89,7 +94,7 @@ func (suite *KeeperTestSuite) TestConvertVouchersToEvmCoins() {
 			address.String(),
 			sdk.NewCoins(sdk.NewCoin(CorrectIbcDenom, sdk.NewInt(1))),
 			func() {},
-			fmt.Errorf("0%s is smaller than 1%s: insufficient funds", CorrectIbcDenom, CorrectIbcDenom),
+			fmt.Errorf("spendable balance  is smaller than 1%s: insufficient funds", CorrectIbcDenom),
 			func() {},
 		},
 		{
@@ -143,6 +148,7 @@ func (suite *KeeperTestSuite) TestIbcTransferCoins() {
 		from          string
 		to            string
 		coin          sdk.Coins
+		channelId     string
 		malleate      func()
 		expectedError error
 		postCheck     func()
@@ -152,6 +158,7 @@ func (suite *KeeperTestSuite) TestIbcTransferCoins() {
 			"test",
 			"to",
 			sdk.NewCoins(sdk.NewCoin(suite.evmParam.EvmDenom, sdk.NewInt(1))),
+			"channel-0",
 			func() {},
 			errors.New("decoding bech32 failed: invalid bech32 string length 4"),
 			func() {},
@@ -161,6 +168,7 @@ func (suite *KeeperTestSuite) TestIbcTransferCoins() {
 			"",
 			"to",
 			sdk.NewCoins(sdk.NewCoin(suite.evmParam.EvmDenom, sdk.NewInt(1))),
+			"channel-0",
 			func() {},
 			errors.New("empty address string is not allowed"),
 			func() {},
@@ -170,6 +178,7 @@ func (suite *KeeperTestSuite) TestIbcTransferCoins() {
 			address.String(),
 			"to",
 			sdk.NewCoins(sdk.NewCoin("ibc/BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", sdk.NewInt(1))),
+			"channel-0",
 			func() {},
 			errors.New("coin ibc/BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA is not supported"),
 			func() {},
@@ -179,6 +188,7 @@ func (suite *KeeperTestSuite) TestIbcTransferCoins() {
 			address.String(),
 			"to",
 			sdk.NewCoins(sdk.NewCoin("fake", sdk.NewInt(1))),
+			"channel-0",
 			func() {},
 			errors.New("the coin fake is neither an ibc voucher or a cronos token"),
 			func() {},
@@ -188,6 +198,7 @@ func (suite *KeeperTestSuite) TestIbcTransferCoins() {
 			address.String(),
 			"to",
 			sdk.NewCoins(sdk.NewCoin(suite.evmParam.EvmDenom, sdk.NewInt(123))),
+			"channel-0",
 			func() {},
 			nil,
 			func() {},
@@ -197,8 +208,9 @@ func (suite *KeeperTestSuite) TestIbcTransferCoins() {
 			address.String(),
 			"to",
 			sdk.NewCoins(sdk.NewCoin(suite.evmParam.EvmDenom, sdk.NewInt(1230000000000))),
+			"channel-0",
 			func() {},
-			errors.New("0aphoton is smaller than 1230000000000aphoton: insufficient funds"),
+			errors.New("spendable balance  is smaller than 1230000000000aphoton: insufficient funds"),
 			func() {},
 		},
 		{
@@ -206,6 +218,7 @@ func (suite *KeeperTestSuite) TestIbcTransferCoins() {
 			address.String(),
 			"to",
 			sdk.NewCoins(sdk.NewCoin(suite.evmParam.EvmDenom, sdk.NewInt(1230000000000))),
+			"channel-0",
 			func() {
 				// Mint Coin to user and module
 				suite.MintCoins(address, sdk.NewCoins(sdk.NewCoin(suite.evmParam.EvmDenom, sdk.NewInt(1230000000000))))
@@ -232,6 +245,7 @@ func (suite *KeeperTestSuite) TestIbcTransferCoins() {
 			address.String(),
 			"to",
 			sdk.NewCoins(sdk.NewCoin("incorrect", sdk.NewInt(123))),
+			"channel-0",
 			func() {
 				// Add support for the IBC token
 				suite.app.CronosKeeper.SetAutoContractForDenom(suite.ctx, "incorrect", common.HexToAddress("0x11"))
@@ -245,6 +259,7 @@ func (suite *KeeperTestSuite) TestIbcTransferCoins() {
 			address.String(),
 			"to",
 			sdk.NewCoins(sdk.NewCoin(CorrectIbcDenom, sdk.NewInt(123))),
+			"channel-0",
 			func() {
 				// Mint IBC token for user
 				suite.MintCoins(address, sdk.NewCoins(sdk.NewCoin(CorrectIbcDenom, sdk.NewInt(123))))
@@ -252,6 +267,22 @@ func (suite *KeeperTestSuite) TestIbcTransferCoins() {
 				suite.app.CronosKeeper.SetAutoContractForDenom(suite.ctx, CorrectIbcDenom, common.HexToAddress("0x11"))
 			},
 			nil,
+			func() {
+			},
+		},
+		{
+			"Correct address with incorrect IBC token denom",
+			address.String(),
+			"to",
+			sdk.NewCoins(sdk.NewCoin(CorrectCronosDenom, sdk.NewInt(123))),
+			"aaa",
+			func() {
+				// Mint IBC token for user
+				suite.MintCoins(address, sdk.NewCoins(sdk.NewCoin(CorrectCronosDenom, sdk.NewInt(123))))
+				// Add support for the IBC token
+				suite.app.CronosKeeper.SetAutoContractForDenom(suite.ctx, CorrectCronosDenom, common.HexToAddress("0x11"))
+			},
+			errors.New("invalid channel id for ibc transfer of source token"),
 			func() {
 			},
 		},
@@ -265,17 +296,17 @@ func (suite *KeeperTestSuite) TestIbcTransferCoins() {
 				app.MakeEncodingConfig().Codec,
 				suite.app.GetKey(types.StoreKey),
 				suite.app.GetKey(types.MemStoreKey),
-				suite.app.GetSubspace(types.ModuleName),
 				suite.app.BankKeeper,
 				keepertest.IbcKeeperMock{},
 				suite.app.GravityKeeper,
 				suite.app.EvmKeeper,
 				suite.app.AccountKeeper,
+				authtypes.NewModuleAddress(govtypes.ModuleName).String(),
 			)
 			suite.app.CronosKeeper = cronosKeeper
 
 			tc.malleate()
-			err := suite.app.CronosKeeper.IbcTransferCoins(suite.ctx, tc.from, tc.to, tc.coin)
+			err := suite.app.CronosKeeper.IbcTransferCoins(suite.ctx, tc.from, tc.to, tc.coin, tc.channelId)
 			if tc.expectedError != nil {
 				suite.Require().EqualError(err, tc.expectedError.Error())
 			} else {

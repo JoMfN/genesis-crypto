@@ -1,5 +1,6 @@
 import base64
 import configparser
+import hashlib
 import json
 import os
 import re
@@ -13,13 +14,18 @@ from pathlib import Path
 
 import bech32
 import eth_utils
+import pytest
+import requests
 import rlp
 import toml
 from dateutil.parser import isoparse
 from dotenv import load_dotenv
 from eth_account import Account
+from eth_utils import abi, to_checksum_address
 from hexbytes import HexBytes
 from pystarport import ledger
+from web3._utils.contracts import abi_to_signature, find_matching_event_abi
+from web3._utils.events import get_event_data
 from web3._utils.method_formatters import receipt_formatter
 from web3._utils.transactions import fill_nonce, fill_transaction_defaults
 from web3.datastructures import AttributeDict
@@ -47,6 +53,12 @@ TEST_CONTRACTS = {
     "TestBlackListERC20": "TestBlackListERC20.sol",
     "CroBridge": "CroBridge.sol",
     "CronosGravityCancellation": "CronosGravityCancellation.sol",
+    "TestCRC20": "TestCRC20.sol",
+    "TestCRC20Proxy": "TestCRC20Proxy.sol",
+    "TestMaliciousSupply": "TestMaliciousSupply.sol",
+    "CosmosERC20": "CosmosToken.sol",
+    "TestBank": "TestBank.sol",
+    "TestICA": "TestICA.sol",
 }
 
 
@@ -64,18 +76,24 @@ CONTRACTS = {
     / "x/cronos/types/contracts/ModuleCRC20.json",
     "ModuleCRC21": Path(__file__).parent.parent
     / "x/cronos/types/contracts/ModuleCRC21.json",
+    "ModuleCRC20Proxy": Path(__file__).parent.parent
+    / "x/cronos/types/contracts/ModuleCRC20Proxy.json",
     **{
         name: contract_path(name, filename) for name, filename in TEST_CONTRACTS.items()
     },
+}
+
+CONTRACT_ABIS = {
+    "IRelayerModule": Path(__file__).parent.parent / "build/IRelayerModule.abi",
+    "IICAModule": Path(__file__).parent.parent / "build/IICAModule.abi",
 }
 
 
 def wait_for_fn(name, fn, *, timeout=240, interval=1):
     for i in range(int(timeout / interval)):
         result = fn()
-        print("check", name, result)
         if result:
-            break
+            return result
         time.sleep(interval)
     else:
         raise TimeoutError(f"wait for {name} timeout")
@@ -113,6 +131,29 @@ def wait_for_block_time(cli, t):
         if now >= t:
             break
         time.sleep(0.5)
+
+
+def approve_proposal(n, rsp, event_query_tx=False):
+    cli = n.cosmos_cli()
+
+    def cb(attrs):
+        return "proposal_id" in attrs
+
+    ev = find_log_event_attrs(rsp["logs"], "submit_proposal", cb)
+    # get proposal_id
+    proposal_id = ev["proposal_id"]
+    for i in range(len(n.config["validators"])):
+        rsp = n.cosmos_cli(i).gov_vote("validator", proposal_id, "yes", event_query_tx)
+        assert rsp["code"] == 0, rsp["raw_log"]
+    wait_for_new_blocks(cli, 1)
+    assert (
+        int(cli.query_tally(proposal_id)["yes_count"]) == cli.staking_pool()
+    ), "all validators should have voted yes"
+    print("wait for proposal to be activated")
+    proposal = cli.query_proposal(proposal_id)
+    wait_for_block_time(cli, isoparse(proposal["voting_end_time"]))
+    proposal = cli.query_proposal(proposal_id)
+    assert proposal["status"] == "PROPOSAL_STATUS_PASSED", proposal
 
 
 def wait_for_port(port, host="127.0.0.1", timeout=40.0):
@@ -178,15 +219,31 @@ def parse_events(logs):
     }
 
 
+def find_log_event_attrs(logs, ev_type, cond=None):
+    for ev in logs[0]["events"]:
+        if ev["type"] == ev_type:
+            attrs = {attr["key"]: attr["value"] for attr in ev["attributes"]}
+            if cond is None or cond(attrs):
+                return attrs
+    return None
+
+
+def decode_base64(raw):
+    try:
+        return base64.b64decode(raw.encode()).decode()
+    except Exception:
+        return raw
+
+
 def parse_events_rpc(events):
     result = defaultdict(dict)
     for ev in events:
         for attr in ev["attributes"]:
             if attr["key"] is None:
                 continue
-            key = base64.b64decode(attr["key"].encode()).decode()
+            key = decode_base64(attr["key"])
             if attr["value"] is not None:
-                value = base64.b64decode(attr["value"].encode()).decode()
+                value = decode_base64(attr["value"])
             else:
                 value = None
             result[ev["type"]][key] = value
@@ -288,16 +345,25 @@ def supervisorctl(inipath, *args):
     ).decode()
 
 
-def deploy_contract(w3, jsonfile, args=(), key=KEYS["validator"]):
+def deploy_contract(w3, jsonfile, args=(), key=KEYS["validator"], exp_gas_used=None):
     """
     deploy contract and return the deployed contract instance
     """
     acct = Account.from_key(key)
     info = json.loads(jsonfile.read_text())
-    contract = w3.eth.contract(abi=info["abi"], bytecode=info["bytecode"])
+    bytecode = ""
+    if "bytecode" in info:
+        bytecode = info["bytecode"]
+    if "byte" in info:
+        bytecode = info["byte"]
+    contract = w3.eth.contract(abi=info["abi"], bytecode=bytecode)
     tx = contract.constructor(*args).build_transaction({"from": acct.address})
     txreceipt = send_transaction(w3, tx, key)
     assert txreceipt.status == 1
+    if exp_gas_used is not None:
+        assert (
+            exp_gas_used == txreceipt.gasUsed
+        ), f"exp {exp_gas_used}, got {txreceipt.gasUsed}"
     address = txreceipt.contractAddress
     return w3.eth.contract(address=address, abi=info["abi"])
 
@@ -331,13 +397,13 @@ def cronos_address_from_mnemonics(mnemonics, prefix=CRONOS_ADDRESS_PREFIX):
     return eth_to_bech32(acct.address, prefix)
 
 
-def send_to_cosmos(gravity_contract, token_contract, recipient, amount, key=None):
+def send_to_cosmos(gravity_contract, token_contract, w3, recipient, amount, key=None):
     """
     do approve and sendToCronos on ethereum side
     """
     acct = Account.from_key(key)
     txreceipt = send_transaction(
-        token_contract.web3,
+        w3,
         token_contract.functions.approve(
             gravity_contract.address, amount
         ).build_transaction({"from": acct.address}),
@@ -346,7 +412,7 @@ def send_to_cosmos(gravity_contract, token_contract, recipient, amount, key=None
     assert txreceipt.status == 1, "approve failed"
 
     return send_transaction(
-        gravity_contract.web3,
+        w3,
         gravity_contract.functions.sendToCronos(
             token_contract.address, HexBytes(recipient), amount
         ).build_transaction({"from": acct.address}),
@@ -354,11 +420,11 @@ def send_to_cosmos(gravity_contract, token_contract, recipient, amount, key=None
     )
 
 
-def deploy_erc20(gravity_contract, denom, name, symbol, decimal, key=None):
+def deploy_erc20(gravity_contract, w3, denom, name, symbol, decimal, key=None):
     acct = Account.from_key(key)
 
     return send_transaction(
-        gravity_contract.web3,
+        w3,
         gravity_contract.functions.deployERC20(
             denom, name, symbol, decimal
         ).build_transaction({"from": acct.address}),
@@ -444,7 +510,7 @@ def modify_command_in_supervisor_config(ini: Path, fn, **kwargs):
     "replace the first node with the instrumented binary"
     ini.write_text(
         re.sub(
-            r"^command = (genesisd .*$)",
+            r"^command = (cronosd .*$)",
             lambda m: f"command = {fn(m.group(1))}",
             ini.read_text(),
             flags=re.M,
@@ -524,3 +590,144 @@ def send_txs(w3, cli, to, keys, params):
     sended_hash_set = send_raw_transactions(w3, raw_transactions)
 
     return block_num_0, sended_hash_set
+
+
+def multiple_send_to_cosmos(gcontract, tcontract, w3, recipient, amount, keys):
+    # use different sender accounts to be able be send concurrently
+    raw_transactions = []
+    for key_from in keys:
+        acct = Account.from_key(key_from)
+        acct_address = HexBytes(acct.address)
+        # approve first
+        approve = tcontract.functions.approve(gcontract.address, amount)
+        txreceipt = send_transaction(
+            w3,
+            approve.build_transaction({"from": acct.address}),
+            key_from,
+        )
+        assert txreceipt.status == 1, "approve failed"
+
+        # generate the tx
+        tx = gcontract.functions.sendToCronos(
+            tcontract.address, HexBytes(recipient), amount
+        ).build_transaction({"from": acct_address})
+        signed = sign_transaction(w3, tx, key_from)
+        raw_transactions.append(signed.rawTransaction)
+
+    # wait for new block
+    w3_wait_for_new_blocks(w3, 1)
+    return send_raw_transactions(w3, raw_transactions)
+
+
+def setup_token_mapping(cronos, name, symbol):
+    # deploy contract
+    w3 = cronos.w3
+    contract = deploy_contract(w3, CONTRACTS[name])
+
+    # setup the contract mapping
+    cronos_cli = cronos.cosmos_cli()
+
+    print("contract", contract.address)
+    denom = f"cronos{contract.address}"
+    balance = contract.caller.balanceOf(ADDRS["validator"])
+    assert balance == 100000000000000000000000000
+
+    print("check the contract mapping not exists yet")
+    with pytest.raises(AssertionError):
+        cronos_cli.query_contract_by_denom(denom)
+
+    rsp = cronos_cli.update_token_mapping(
+        denom, contract.address, symbol, 6, from_="validator"
+    )
+    assert rsp["code"] == 0, rsp["raw_log"]
+    wait_for_new_blocks(cronos_cli, 1)
+
+    print("check the contract mapping exists now")
+    rsp = cronos_cli.query_denom_by_contract(contract.address)
+    assert rsp["denom"] == denom
+    return contract, denom
+
+
+def module_address(name):
+    data = hashlib.sha256(name.encode()).digest()[:20]
+    return to_checksum_address(decode_bech32(eth_to_bech32(data)).hex())
+
+
+def submit_any_proposal(cronos, tmp_path):
+    # governance module account as granter
+    cli = cronos.cosmos_cli()
+    granter_addr = "crc10d07y265gmmuvt4z0w9aw880jnsr700jdufnyd"
+    grantee_addr = cli.address("signer1")
+
+    # this json can be obtained with `--generate-only` flag for respective cli calls
+    proposal_json = {
+        "messages": [
+            {
+                "@type": "/cosmos.feegrant.v1beta1.MsgGrantAllowance",
+                "granter": granter_addr,
+                "grantee": grantee_addr,
+                "allowance": {
+                    "@type": "/cosmos.feegrant.v1beta1.BasicAllowance",
+                    "spend_limit": [],
+                    "expiration": None,
+                },
+            }
+        ],
+        "deposit": "1basetcro",
+        "title": "title",
+        "summary": "summary",
+    }
+    proposal_file = tmp_path / "proposal.json"
+    proposal_file.write_text(json.dumps(proposal_json))
+    rsp = cli.submit_gov_proposal(proposal_file, from_="community")
+    assert rsp["code"] == 0, rsp["raw_log"]
+    approve_proposal(cronos, rsp)
+    grant_detail = cli.query_grant(granter_addr, grantee_addr)
+    assert grant_detail["granter"] == granter_addr
+    assert grant_detail["grantee"] == grantee_addr
+
+
+def get_method_map(contract_info, by_name=False):
+    method_map = {}
+    for item in contract_info:
+        if item["type"] != "event":
+            continue
+        event_abi = find_matching_event_abi(contract_info, item["name"])
+        signature = abi_to_signature(event_abi)
+        key = f"0x{abi.event_signature_to_log_topic(signature).hex()}"
+        if by_name:
+            name = signature.split("(")[0]
+            method_map[name] = key
+        else:
+            method_map[key] = signature
+    return method_map
+
+
+def get_topic_data(w3, method_map, contract_info, log):
+    method = method_map[log.topics[0].hex()]
+    name = method.split("(")[0]
+    event_abi = find_matching_event_abi(contract_info, name)
+    event_data = get_event_data(w3.codec, event_abi, log)
+    return name, event_data.args
+
+
+def get_logs_since(w3, addr, start):
+    end = w3.eth.get_block_number()
+    return w3.eth.get_logs(
+        {
+            "fromBlock": start,
+            "toBlock": end,
+            "address": [addr],
+        }
+    )
+
+
+def get_consensus_params(port, height):
+    url = f"http://127.0.0.1:{port}/consensus_params?height={height}"
+    return requests.get(url).json()["result"]["consensus_params"]
+
+
+def get_send_enable(port):
+    url = f"http://127.0.0.1:{port}/cosmos/bank/v1beta1/params"
+    raw = requests.get(url).json()
+    return raw["params"]["send_enabled"]

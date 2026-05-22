@@ -1,21 +1,27 @@
 import json
+import subprocess
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
 import web3
+from dateutil.parser import isoparse
 from eth_bloom import BloomFilter
 from eth_utils import abi, big_endian_to_int
 from hexbytes import HexBytes
 from pystarport import cluster, ports
 
+from .cosmoscli import CosmosCLI
+from .network import Geth
 from .utils import (
     ADDRS,
     CONTRACTS,
     KEYS,
     Greeter,
     RevertTestContract,
+    approve_proposal,
     build_batch_tx,
     contract_address,
     contract_path,
@@ -24,9 +30,79 @@ from .utils import (
     modify_command_in_supervisor_config,
     send_transaction,
     send_txs,
+    submit_any_proposal,
     wait_for_block,
+    wait_for_block_time,
+    wait_for_new_blocks,
     wait_for_port,
 )
+
+
+def find_log_event_attrs(logs, ev_type, cond=None):
+    for ev in logs[0]["events"]:
+        if ev["type"] == ev_type:
+            attrs = {attr["key"]: attr["value"] for attr in ev["attributes"]}
+            if cond is None or cond(attrs):
+                return attrs
+    return None
+
+
+def get_proposal_id(rsp):
+    def cb(attrs):
+        return "proposal_id" in attrs
+
+    msg = ",/cosmos.gov.v1.MsgExecLegacyContent"
+    ev = find_log_event_attrs(rsp["logs"], "submit_proposal", cb)
+    assert ev["proposal_messages"] == msg, rsp
+    return ev["proposal_id"]
+
+
+def approve_proposal_legacy(node, rsp):
+    cluster = node.cosmos_cli()
+    proposal_id = get_proposal_id(rsp)
+    proposal = cluster.query_proposal(proposal_id)
+    assert proposal["status"] == "PROPOSAL_STATUS_DEPOSIT_PERIOD", proposal
+    amount = cluster.balance(cluster.address("community"))
+    rsp = cluster.gov_deposit("community", proposal_id, "1basetcro")
+    assert rsp["code"] == 0, rsp["raw_log"]
+    proposal = cluster.query_proposal(proposal_id)
+    assert proposal["status"] == "PROPOSAL_STATUS_VOTING_PERIOD", proposal
+    for i in range(len(node.config["validators"])):
+        rsp = node.cosmos_cli(i).gov_vote("validator", proposal_id, "yes")
+        assert rsp["code"] == 0, rsp["raw_log"]
+
+    wait_for_block_time(
+        cluster, isoparse(proposal["voting_end_time"]) + timedelta(seconds=5)
+    )
+    proposal = cluster.query_proposal(proposal_id)
+    assert proposal["status"] == "PROPOSAL_STATUS_PASSED", proposal
+    return amount
+
+
+def test_ica_enabled(cronos):
+    cli = cronos.cosmos_cli()
+    p = cli.query_icacontroller_params()
+    assert p["controller_enabled"]
+    rsp = cli.gov_propose_legacy(
+        "community",
+        "param-change",
+        {
+            "title": "Update icacontroller enabled",
+            "description": "ditto",
+            "changes": [
+                {
+                    "subspace": "icacontroller",
+                    "key": "ControllerEnabled",
+                    "value": False,
+                }
+            ],
+        },
+        mode="sync",
+    )
+    assert rsp["code"] == 0, rsp["raw_log"]
+    approve_proposal_legacy(cronos, rsp)
+    p = cli.query_icacontroller_params()
+    assert not p["controller_enabled"]
 
 
 def test_basic(cluster):
@@ -37,6 +113,9 @@ def test_basic(cluster):
 def test_send_transaction(cluster):
     "test eth_sendTransaction api"
     w3 = cluster.w3
+    # wait 1s to avoid unlock error
+    if isinstance(cluster, Geth):
+        time.sleep(1)
     txhash = w3.eth.send_transaction(
         {
             "from": ADDRS["validator"],
@@ -46,6 +125,7 @@ def test_send_transaction(cluster):
     )
     receipt = w3.eth.wait_for_transaction_receipt(txhash)
     assert receipt.status == 1
+    assert receipt.gasUsed == 21000
 
 
 def test_events(cluster, suspend_capture):
@@ -54,6 +134,7 @@ def test_events(cluster, suspend_capture):
         w3,
         CONTRACTS["TestERC20A"],
         key=KEYS["validator"],
+        exp_gas_used=641641,
     )
     tx = erc20.functions.transfer(ADDRS["community"], 10).build_transaction(
         {"from": ADDRS["validator"]}
@@ -180,7 +261,7 @@ def test_statesync(cronos):
     # We can only create a new node with statesync config
     data = Path(cronos.base_dir).parent  # Same data dir as cronos fixture
     chain_id = cronos.config["chain_id"]  # Same chain_id as cronos fixture
-    cmd = "genesisd"
+    cmd = "cronosd"
     # create a clustercli object from ClusterCLI class
     clustercli = cluster.ClusterCLI(data, cmd=cmd, chain_id=chain_id)
     # create a new node with statesync enabled
@@ -191,9 +272,14 @@ def test_statesync(cronos):
         clustercli.base_port(i),
         {
             "json-rpc": {
-                "address": "0.0.0.0:{EVMRPC_PORT}",
-                "ws-address": "0.0.0.0:{EVMRPC_PORT_WS}",
-            }
+                "address": "127.0.0.1:{EVMRPC_PORT}",
+                "ws-address": "127.0.0.1:{EVMRPC_PORT_WS}",
+            },
+            "memiavl": {
+                "enable": True,
+                "zero-copy": True,
+                "snapshot-interval": 5,
+            },
         },
     )
     clustercli.supervisor.startProcess(f"{clustercli.chain_id}-node{i}")
@@ -241,6 +327,111 @@ def test_statesync(cronos):
     )
 
     print("succesfully syncing")
+    clustercli.supervisor.stopProcess(f"{clustercli.chain_id}-node{i}")
+
+
+def test_local_statesync(cronos, tmp_path_factory):
+    """
+    - init a new node, enable versiondb
+    - dump snapshot on node0
+    - load snapshot to the new node
+    - restore the new node state from the snapshot
+    - bootstrap cometbft state
+    - restore the versiondb from the snapshot
+    - startup the node, should sync
+    - cleanup
+    """
+    # wait for the network to grow a little bit
+    cli0 = cronos.cosmos_cli(0)
+    wait_for_block(cli0, 6)
+
+    sync_info = cli0.status()["SyncInfo"]
+    cronos.supervisorctl("stop", "cronos_777-1-node0")
+    tarball = cli0.data_dir / "snapshot.tar.gz"
+    height = int(sync_info["latest_block_height"])
+    # round down to multplies of memiavl.snapshot-interval
+    height -= height % 5
+
+    if height not in set(item.height for item in cli0.list_snapshot()):
+        cli0.export_snapshot(height)
+
+    cli0.dump_snapshot(height, tarball)
+    cronos.supervisorctl("start", "cronos_777-1-node0")
+    wait_for_port(ports.evmrpc_port(cronos.base_port(0)))
+
+    home = tmp_path_factory.mktemp("local_statesync")
+    print("home", home)
+
+    i = len(cronos.config["validators"])
+    base_port = 26650 + i * 10
+    node_rpc = "tcp://127.0.0.1:%d" % ports.rpc_port(base_port)
+    cli = CosmosCLI.init(
+        "local_statesync",
+        Path(home),
+        node_rpc,
+        cronos.chain_binary,
+        "cronos_777-1",
+    )
+
+    # init the configs
+    peers = ",".join(
+        [
+            "tcp://%s@%s:%d"
+            % (
+                cronos.cosmos_cli(i).node_id(),
+                val["hostname"],
+                ports.p2p_port(val["base_port"]),
+            )
+            for i, val in enumerate(cronos.config["validators"])
+        ]
+    )
+    rpc_servers = ",".join(cronos.node_rpc(i) for i in range(2))
+    trust_height = int(sync_info["latest_block_height"])
+    trust_hash = sync_info["latest_block_hash"]
+
+    cluster.edit_tm_cfg(
+        Path(home) / "config/config.toml",
+        base_port,
+        peers,
+        {
+            "statesync": {
+                "rpc_servers": rpc_servers,
+                "trust_height": trust_height,
+                "trust_hash": trust_hash,
+            },
+        },
+    )
+    cluster.edit_app_cfg(
+        Path(home) / "config/app.toml",
+        base_port,
+        {
+            "store": {
+                "streamers": ["versiondb"],
+            },
+        },
+    )
+
+    # restore the states
+    cli.load_snapshot(tarball)
+    print(cli.list_snapshot())
+    cli.restore_snapshot(height)
+    cli.bootstrap_state()
+    cli.restore_versiondb(height)
+
+    with subprocess.Popen(
+        [cronos.chain_binary, "start", "--home", home],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+    ):
+        wait_for_port(ports.rpc_port(base_port))
+        # check the node sync normally
+        wait_for_new_blocks(cli, 2)
+        # check grpc works
+        print("distribution", cli.distribution_community(height=height))
+        with pytest.raises(Exception) as exc_info:
+            cli.distribution_community(height=height - 1)
+
+        assert "Stored fee pool should not have been nil" in exc_info.value.args[0]
 
 
 def test_transaction(cronos):
@@ -469,7 +660,9 @@ def test_message_call(cronos):
 
     begin = time.time()
     tx["gas"] = w3.eth.estimate_gas(tx)
-    assert time.time() - begin < 5  # should finish in reasonable time
+    elapsed = time.time() - begin
+    print("elapsed:", elapsed)
+    assert elapsed < 5  # should finish in reasonable time
 
     receipt = send_transaction(w3, tx, KEYS["community"])
     assert 23828976 == receipt.cumulativeGasUsed
@@ -620,14 +813,21 @@ def test_failed_transfer_tx(cronos):
 
     # check traceTransaction
     rsps = [
-        w3.provider.make_request("debug_traceTransaction", [h.hex()])["result"]
-        for h in tx_hashes
+        w3.provider.make_request("debug_traceTransaction", [h.hex()]) for h in tx_hashes
     ]
     for rsp, receipt in zip(rsps, receipts):
-        # FIXME https://github.com/evmos/ethermint/issues/1185
-        # trace transaction always return success for simple transfer tx
-        assert not rsp["failed"]
-        assert receipt.gasUsed == rsp["gas"]
+        if receipt.status == 1:
+            result = rsp["result"]
+            assert not result["failed"]
+            assert receipt.gasUsed == result["gas"]
+        else:
+            assert rsp["error"] == {
+                "code": -32000,
+                "message": (
+                    "rpc error: code = Internal desc = "
+                    "insufficient balance for transfer"
+                ),
+            }
 
 
 def test_log0(cluster):
@@ -668,7 +868,7 @@ def test_contract(cronos):
 origin_cmd = None
 
 
-@pytest.mark.parametrize("max_gas_wanted", [80000000, 40000000, 25000000, 500000])
+@pytest.mark.parametrize("max_gas_wanted", [80000000, 40000000, 25000000, 500000, None])
 def test_tx_inclusion(cronos, max_gas_wanted):
     """
     - send multiple heavy transactions at the same time.
@@ -681,6 +881,8 @@ def test_tx_inclusion(cronos, max_gas_wanted):
         global origin_cmd
         if origin_cmd is None:
             origin_cmd = cmd
+        if max_gas_wanted is None:
+            return origin_cmd
         return f"{origin_cmd} --evm.max-tx-gas-wanted {max_gas_wanted}"
 
     modify_command_in_supervisor_config(
@@ -689,6 +891,10 @@ def test_tx_inclusion(cronos, max_gas_wanted):
     )
     cronos.supervisorctl("update")
     wait_for_port(ports.evmrpc_port(cronos.base_port(0)))
+
+    # reset to origin_cmd only
+    if max_gas_wanted is None:
+        return
 
     w3 = cronos.w3
     cli = cronos.cosmos_cli()
@@ -732,3 +938,42 @@ def test_replay_protection(cronos):
         match=r"only replay-protected \(EIP-155\) transactions allowed over RPC",
     ):
         w3.eth.send_raw_transaction(HexBytes(raw))
+
+
+@pytest.mark.gov
+def test_submit_any_proposal(cronos, tmp_path):
+    submit_any_proposal(cronos, tmp_path)
+
+
+@pytest.mark.gov
+def test_submit_send_enabled(cronos, tmp_path):
+    # check bank send enable
+    cli = cronos.cosmos_cli()
+    p = cli.query_bank_send()
+    assert len(p) == 0, "should be empty"
+    proposal = tmp_path / "proposal.json"
+    # governance module account as signer
+    signer = "crc10d07y265gmmuvt4z0w9aw880jnsr700jdufnyd"
+    send_enable = [
+        {"denom": "basetcro", "enabled": False},
+        {"denom": "stake", "enabled": True},
+    ]
+    proposal_src = {
+        "messages": [
+            {
+                "@type": "/cosmos.bank.v1beta1.MsgSetSendEnabled",
+                "authority": signer,
+                "sendEnabled": send_enable,
+            }
+        ],
+        "deposit": "1basetcro",
+        "title": "title",
+        "summary": "summary",
+    }
+    proposal.write_text(json.dumps(proposal_src))
+    rsp = cli.submit_gov_proposal(proposal, from_="community")
+    assert rsp["code"] == 0, rsp["raw_log"]
+    approve_proposal(cronos, rsp)
+    print("check params have been updated now")
+    p = cli.query_bank_send()
+    assert sorted(p, key=lambda x: x["denom"]) == send_enable

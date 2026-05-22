@@ -3,6 +3,7 @@
 , buildGoApplication
 , nix-gitignore
 , buildPackages
+, coverage ? false # https://tip.golang.org/doc/go1.20#cover
 , rocksdb
 , network ? "mainnet"  # mainnet|testnet
 , rev ? "dirty"
@@ -10,10 +11,9 @@
 , nativeByteOrder ? true # nativeByteOrder mode will panic on big endian machines
 }:
 let
-  version = "v1.0.0";
+  version = "v1.1.1";
   pname = "genesisd";
-  tags = [ "ledger" "netgo" network "rocksdb" "grocksdb_no_link" ]
-    ++ lib.optionals nativeByteOrder [ "nativebyteorder" ];
+  tags = [ "ledger" "netgo" network "rocksdb" "grocksdb_no_link" ] ++ lib.optionals nativeByteOrder [ "nativebyteorder" ];
   ldflags = lib.concatStringsSep "\n" ([
     "-X github.com/cosmos/cosmos-sdk/version.Name=genesis"
     "-X github.com/cosmos/cosmos-sdk/version.AppName=${pname}"
@@ -31,21 +31,38 @@ buildGoApplication rec {
     "!/app/"
     "!/cmd/"
     "!/client/"
+    "!/versiondb/"
+    "!/memiavl/"
+    "!/store/"
     "!go.mod"
     "!go.sum"
     "!gomod2nix.toml"
   ] ./.);
   modules = ./gomod2nix.toml;
   pwd = src; # needed to support replace
-  subPackages = [ "cmd/genesisd" ];
+  subPackages = [ "cmd/cronosd" ];
+  buildFlags = lib.optionalString coverage "-cover";
   CGO_ENABLED = "1";
-  CGO_LDFLAGS =
+  CGO_LDFLAGS = lib.optionalString (rocksdb != null) (
     if static then "-lrocksdb -pthread -lstdc++ -ldl -lzstd -lsnappy -llz4 -lbz2 -lz"
     else if stdenv.hostPlatform.isWindows then "-lrocksdb-shared"
-    else "-lrocksdb -pthread -lstdc++ -ldl";
+    else "-lrocksdb -pthread -lstdc++ -ldl"
+  );
 
-  postFixup = lib.optionalString stdenv.isDarwin ''
-    ${stdenv.cc.targetPrefix}install_name_tool -change "@rpath/librocksdb.8.dylib" "${rocksdb}/lib/librocksdb.dylib" $out/bin/genesisd
+  postInstall = ''
+    ext="${stdenv.hostPlatform.extensions.executable}"
+
+    if [ -f "$out/bin/cronosd$ext" ]; then
+      mv "$out/bin/cronosd$ext" "$out/bin/genesisd$ext"
+    fi
+
+    if [ -f "$out/bin/cronosd" ]; then
+      mv "$out/bin/cronosd" "$out/bin/genesisd"
+    fi
+  '';
+
+  postFixup = lib.optionalString (stdenv.isDarwin && rocksdb != null) ''
+    ${stdenv.cc.bintools.targetPrefix}install_name_tool -change "@rpath/librocksdb.8.dylib" "${rocksdb}/lib/librocksdb.dylib" $out/bin/genesisd
   '';
 
   doCheck = false;

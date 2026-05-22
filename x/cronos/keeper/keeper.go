@@ -2,21 +2,26 @@ package keeper
 
 import (
 	"fmt"
+	"math/big"
 	"strings"
 
-	errorsmod "cosmossdk.io/errors"
-	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
+	"cosmossdk.io/errors"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
-	paramtypes "github.com/cosmos/cosmos-sdk/x/params/types"
 
-	"github.com/tendermint/tendermint/libs/log"
+	"github.com/cometbft/cometbft/libs/log"
 
 	"github.com/cosmos/cosmos-sdk/codec"
 	"github.com/cosmos/cosmos-sdk/store/prefix"
 	storetypes "github.com/cosmos/cosmos-sdk/store/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	"github.com/crypto-org-chain/cronos/x/cronos/types"
+	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
+	ibcfeetypes "github.com/cosmos/ibc-go/v7/modules/apps/29-fee/types"
+	clienttypes "github.com/cosmos/ibc-go/v7/modules/core/02-client/types"
+	channeltypes "github.com/cosmos/ibc-go/v7/modules/core/04-channel/types"
+	ibcexported "github.com/cosmos/ibc-go/v7/modules/core/exported"
+	cronosprecompiles "github.com/crypto-org-chain/cronos/v2/x/cronos/keeper/precompiles"
+	"github.com/crypto-org-chain/cronos/v2/x/cronos/types"
 	"github.com/ethereum/go-ethereum/common"
 	// this line is used by starport scaffolding # ibc/keeper/import
 )
@@ -27,8 +32,6 @@ type (
 		storeKey storetypes.StoreKey
 		memKey   storetypes.StoreKey
 
-		// module specific parameter space that can be configured through governance
-		paramSpace paramtypes.Subspace
 		// update balance and accounting operations with coins
 		bankKeeper types.BankKeeper
 		// ibc transfer operations
@@ -40,6 +43,10 @@ type (
 		// account keeper
 		accountKeeper types.AccountKeeper
 
+		// the address capable of executing a MsgUpdateParams message. Typically, this
+		// should be the x/gov module account.
+		authority string
+
 		// this line is used by starport scaffolding # ibc/keeper/attribute
 	}
 )
@@ -48,29 +55,28 @@ func NewKeeper(
 	cdc codec.Codec,
 	storeKey,
 	memKey storetypes.StoreKey,
-	paramSpace paramtypes.Subspace,
 	bankKeeper types.BankKeeper,
 	transferKeeper types.TransferKeeper,
 	gravityKeeper types.GravityKeeper,
 	evmKeeper types.EvmKeeper,
 	accountKeeper types.AccountKeeper,
+	authority string,
 	// this line is used by starport scaffolding # ibc/keeper/parameter
 ) *Keeper {
-	// set KeyTable if it has not already been set
-	if !paramSpace.HasKeyTable() {
-		paramSpace = paramSpace.WithKeyTable(types.ParamKeyTable())
+	if _, err := sdk.AccAddressFromBech32(authority); err != nil {
+		panic(err)
 	}
 
 	return &Keeper{
 		cdc:            cdc,
 		storeKey:       storeKey,
 		memKey:         memKey,
-		paramSpace:     paramSpace,
 		bankKeeper:     bankKeeper,
 		transferKeeper: transferKeeper,
 		gravityKeeper:  gravityKeeper,
 		evmKeeper:      evmKeeper,
 		accountKeeper:  accountKeeper,
+		authority:      authority,
 		// this line is used by starport scaffolding # ibc/keeper/return
 	}
 }
@@ -99,6 +105,11 @@ func (k Keeper) getAutoContractByDenom(ctx sdk.Context, denom string) (common.Ad
 	}
 
 	return common.BytesToAddress(bz), true
+}
+
+// GetAuthority returns the x/cronos module's authority.
+func (k Keeper) GetAuthority() string {
+	return k.authority
 }
 
 // GetContractByDenom find the corresponding contract for the denom,
@@ -211,16 +222,9 @@ func (k Keeper) GetAccount(ctx sdk.Context, addr sdk.AccAddress) authtypes.Accou
 // RegisterOrUpdateTokenMapping update the token mapping, register a coin metadata if needed
 func (k Keeper) RegisterOrUpdateTokenMapping(ctx sdk.Context, msg *types.MsgUpdateTokenMapping) error {
 	if types.IsSourceCoin(msg.Denom) {
-		contract, err := types.GetContractAddressFromDenom(msg.Denom)
+		_, err := types.GetContractAddressFromDenom(msg.Denom)
 		if err != nil {
 			return err
-		}
-		// we check that denom use the same contract address in checksum format
-		if contract != common.HexToAddress(msg.Contract).Hex() {
-			return errorsmod.Wrapf(
-				sdkerrors.ErrInvalidRequest,
-				"coin denom %s does not match with contract address %s",
-				msg.Denom, common.HexToAddress(msg.Contract).Hex())
 		}
 
 		// check that the coin is registered, otherwise register it
@@ -257,7 +261,7 @@ func (k Keeper) RegisterOrUpdateTokenMapping(ctx sdk.Context, msg *types.MsgUpda
 		k.bankKeeper.SetDenomMetaData(ctx, metadata)
 
 		// update the mapping
-		if err := k.SetExternalContractForDenom(ctx, msg.Denom, common.HexToAddress(contract)); err != nil {
+		if err := k.SetExternalContractForDenom(ctx, msg.Denom, common.HexToAddress(msg.Contract)); err != nil {
 			return err
 		}
 	} else {
@@ -266,7 +270,7 @@ func (k Keeper) RegisterOrUpdateTokenMapping(ctx sdk.Context, msg *types.MsgUpda
 			k.DeleteExternalContractForDenom(ctx, msg.Denom)
 		} else {
 			if !common.IsHexAddress(msg.Contract) {
-				return errorsmod.Wrapf(sdkerrors.ErrInvalidAddress, "invalid contract address (%s)", msg.Contract)
+				return errors.Wrapf(sdkerrors.ErrInvalidAddress, "invalid contract address (%s)", msg.Contract)
 			}
 			// update the mapping
 			contract := common.HexToAddress(msg.Contract)
@@ -276,5 +280,83 @@ func (k Keeper) RegisterOrUpdateTokenMapping(ctx sdk.Context, msg *types.MsgUpda
 		}
 	}
 
+	return nil
+}
+
+func (k Keeper) onPacketResult(
+	ctx sdk.Context,
+	packet channeltypes.Packet,
+	acknowledgement bool,
+	relayer sdk.AccAddress,
+	contractAddress,
+	packetSenderAddress string,
+) error {
+	sender, err := sdk.AccAddressFromBech32(packetSenderAddress)
+	if err != nil {
+		return fmt.Errorf("invalid bech32 address: %s, err: %w", packetSenderAddress, err)
+	}
+	senderAddr := common.BytesToAddress(sender)
+	contractAddr := common.HexToAddress(contractAddress)
+	if senderAddr != contractAddr {
+		return fmt.Errorf("sender is not authenticated: expected %s, got %s", senderAddr, contractAddr)
+	}
+	data, err := cronosprecompiles.OnPacketResultCallback(packet.SourceChannel, packet.Sequence, acknowledgement)
+	if err != nil {
+		return err
+	}
+	gasLimit := k.GetParams(ctx).MaxCallbackGas
+	_, _, err = k.CallEVM(ctx, &senderAddr, data, big.NewInt(0), gasLimit)
+	return err
+}
+
+func (k Keeper) IBCOnAcknowledgementPacketCallback(
+	ctx sdk.Context,
+	packet channeltypes.Packet,
+	acknowledgement []byte,
+	relayer sdk.AccAddress,
+	contractAddress,
+	packetSenderAddress string,
+) error {
+	// the ack is wrapped by fee middleware
+	var ack ibcfeetypes.IncentivizedAcknowledgement
+	if err := k.cdc.UnmarshalJSON(acknowledgement, &ack); err != nil {
+		return err
+	}
+	var res channeltypes.Acknowledgement
+	if err := k.cdc.UnmarshalJSON(ack.AppAcknowledgement, &res); err != nil {
+		return err
+	}
+	return k.onPacketResult(ctx, packet, res.Success(), relayer, contractAddress, packetSenderAddress)
+}
+
+func (k Keeper) IBCOnTimeoutPacketCallback(
+	ctx sdk.Context,
+	packet channeltypes.Packet,
+	relayer sdk.AccAddress,
+	contractAddress,
+	packetSenderAddress string,
+) error {
+	return k.onPacketResult(ctx, packet, false, relayer, contractAddress, packetSenderAddress)
+}
+
+func (k Keeper) IBCReceivePacketCallback(
+	ctx sdk.Context,
+	packet ibcexported.PacketI,
+	ack ibcexported.Acknowledgement,
+	contractAddress string,
+) error {
+	return nil
+}
+
+func (k Keeper) IBCSendPacketCallback(
+	ctx sdk.Context,
+	sourcePort string,
+	sourceChannel string,
+	timeoutHeight clienttypes.Height,
+	timeoutTimestamp uint64,
+	packetData []byte,
+	contractAddress,
+	packetSenderAddress string,
+) error {
 	return nil
 }

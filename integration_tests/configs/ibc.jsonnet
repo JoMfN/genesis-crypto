@@ -7,16 +7,32 @@ config {
     key_name: 'signer1',
     accounts: super.accounts[:std.length(super.accounts) - 1] + [super.accounts[std.length(super.accounts) - 1] {
       coins: super.coins + ',100000000000ibcfee',
-    }],
+    }] + [
+      {
+        name: 'user' + i,
+        coins: '30000000000000000000000basetcro',
+      }
+      for i in std.range(1, 20)
+    ],
     'app-config'+: {
       'index-events': super['index-events'] + ['message.action'],
     },
     genesis+: {
       app_state+: {
+        cronos+: {
+          params+: {
+            max_callback_gas: 50000,
+          },
+        },
         feemarket+: {
           params+: {
             no_base_fee: true,
             base_fee: '0',
+          },
+        },
+        icaauth: {
+          params: {
+            min_timeout_duration: '1ms',
           },
         },
       },
@@ -26,6 +42,7 @@ config {
     cmd: 'chain-maind',
     'start-flags': '--trace',
     'account-prefix': 'cro',
+    'coin-type': 394,
     'app-config': {
       'minimum-gas-prices': '500basecro',
     },
@@ -34,12 +51,18 @@ config {
         coins: '2234240000000000000cro',
         staked: '10000000000000cro',
         mnemonic: '${VALIDATOR1_MNEMONIC}',
+        client_config: {
+          'broadcast-mode': 'block',
+        },
         base_port: 26800,
       },
       {
         coins: '987870000000000000cro',
         staked: '20000000000000cro',
         mnemonic: '${VALIDATOR2_MNEMONIC}',
+        client_config: {
+          'broadcast-mode': 'block',
+        },
         base_port: 26810,
       },
     ],
@@ -59,6 +82,12 @@ config {
         coins: '10000000000000cro',
         mnemonic: '${SIGNER2_MNEMONIC}',
       },
+    ] + [
+      {
+        name: 'user' + i,
+        coins: '10000000000000cro',
+      }
+      for i in std.range(1, 20)
     ],
     genesis: {
       app_state: {
@@ -92,6 +121,7 @@ config {
             params: {
               allow_messages: [
                 '/cosmos.bank.v1beta1.MsgSend',
+                '/cosmos.staking.v1beta1.MsgDelegate',
               ],
             },
           },
@@ -125,8 +155,8 @@ config {
     chains: [
       {
         id: 'cronos_777-1',
-        max_gas: 500000,
-        gas_multiplier: 2,
+        max_gas: 1000000,
+        gas_multiplier: 1.1,
         address_type: {
           derivation: 'ethermint',
           proto_type: {
@@ -136,6 +166,9 @@ config {
         gas_price: {
           price: 10000000000000000,
           denom: 'basetcro',
+        },
+        event_source: {
+          batch_delay: '5000ms',
         },
         extension_options: [{
           type: 'ethermint_dynamic_fee',
@@ -148,6 +181,9 @@ config {
         gas_price: {
           price: 1000000,
           denom: 'basecro',
+        },
+        event_source: {
+          batch_delay: '5000ms',
         },
       },
     ],

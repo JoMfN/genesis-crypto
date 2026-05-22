@@ -11,24 +11,23 @@ import (
 	"time"
 
 	sdkmath "cosmossdk.io/math"
+	dbm "github.com/cometbft/cometbft-db"
+	abci "github.com/cometbft/cometbft/abci/types"
+	"github.com/cometbft/cometbft/libs/log"
+	tmproto "github.com/cometbft/cometbft/proto/tendermint/types"
+	tmtypes "github.com/cometbft/cometbft/types"
 	"github.com/stretchr/testify/require"
-	abci "github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/libs/log"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
-	tmtypes "github.com/tendermint/tendermint/types"
-	dbm "github.com/tendermint/tm-db"
 
-	errorsmod "cosmossdk.io/errors"
-	bam "github.com/cosmos/cosmos-sdk/baseapp"
+	"cosmossdk.io/errors"
+	baseapp "github.com/cosmos/cosmos-sdk/baseapp"
 	"github.com/cosmos/cosmos-sdk/client"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	cryptocodec "github.com/cosmos/cosmos-sdk/crypto/codec"
 	"github.com/cosmos/cosmos-sdk/crypto/keys/ed25519"
 	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
 	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
-	servertypes "github.com/cosmos/cosmos-sdk/server/types"
-	"github.com/cosmos/cosmos-sdk/simapp/helpers"
 	"github.com/cosmos/cosmos-sdk/testutil/mock"
+	simtestutil "github.com/cosmos/cosmos-sdk/testutil/sims"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
@@ -37,19 +36,19 @@ import (
 	minttypes "github.com/cosmos/cosmos-sdk/x/mint/types"
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 
-	"github.com/crypto-org-chain/cronos/x/cronos"
-	cronostypes "github.com/crypto-org-chain/cronos/x/cronos/types"
+	cronostypes "github.com/crypto-org-chain/cronos/v2/x/cronos/types"
 )
 
 const (
 	SimAppChainID  = "simulation_777-1"
+	SimBlockMaxGas = 815000000
 	TestAppChainID = "cronos_777-1"
 )
 
 // DefaultConsensusParams defines the default Tendermint consensus params used in
 // App testing.
-var DefaultConsensusParams = &abci.ConsensusParams{
-	Block: &abci.BlockParams{
+var DefaultConsensusParams = &tmproto.ConsensusParams{
+	Block: &tmproto.BlockParams{
 		MaxBytes: 200000,
 		MaxGas:   200000000,
 	},
@@ -65,35 +64,19 @@ var DefaultConsensusParams = &abci.ConsensusParams{
 	},
 }
 
-// ExperimentalAppOptions is a stub implementing AppOptions
-type ExperimentalAppOptions struct{}
-
-// Get implements AppOptions
-func (ao ExperimentalAppOptions) Get(o string) interface{} {
-	if o == cronos.ExperimentalFlag {
-		return true
-	}
-	return nil
-}
-
-func setup(withGenesis bool, invCheckPeriod uint, experimental bool) (*App, GenesisState) {
+func setup(withGenesis, skipGravity bool, invCheckPeriod uint) (*App, GenesisState) {
 	db := dbm.NewMemDB()
 	encCdc := MakeEncodingConfig()
-	var appOption servertypes.AppOptions
-	if experimental {
-		appOption = ExperimentalAppOptions{}
-	} else {
-		appOption = EmptyAppOptions{}
-	}
-	app := New(log.NewNopLogger(), db, nil, true, map[int64]bool{}, DefaultNodeHome, invCheckPeriod, encCdc, appOption)
+	appOption := EmptyAppOptions{}
+	app := New(log.NewNopLogger(), db, nil, true, skipGravity, map[int64]bool{}, DefaultNodeHome, invCheckPeriod, encCdc, appOption, baseapp.SetChainID(TestAppChainID))
 	if withGenesis {
-		return app, NewDefaultGenesisState(encCdc.Codec, experimental)
+		return app, NewDefaultGenesisState(encCdc.Codec)
 	}
 	return app, GenesisState{}
 }
 
 // Setup initializes a new App. A Nop logger is set in App.
-func Setup(t *testing.T, cronosAdmin string, experimental bool) *App {
+func Setup(t *testing.T, cronosAdmin string, skipGravity bool) *App {
 	t.Helper()
 
 	privVal := mock.NewPV()
@@ -111,17 +94,17 @@ func Setup(t *testing.T, cronosAdmin string, experimental bool) *App {
 		Address: acc.GetAddress().String(),
 		Coins:   sdk.NewCoins(sdk.NewCoin(sdk.DefaultBondDenom, sdk.NewInt(100000000000000))),
 	}
-	return SetupWithGenesisValSet(t, cronosAdmin, experimental, valSet, []authtypes.GenesisAccount{acc}, balance)
+	return SetupWithGenesisValSet(t, cronosAdmin, skipGravity, valSet, []authtypes.GenesisAccount{acc}, balance)
 }
 
 // SetupWithGenesisValSet initializes a new App with a validator set and genesis accounts
 // that also act as delegators. For simplicity, each validator is bonded with a delegation
 // of one consensus engine unit (10^6) in the default token of the simapp from first genesis
 // account. A Nop logger is set in App.
-func SetupWithGenesisValSet(t *testing.T, cronosAdmin string, experimental bool, valSet *tmtypes.ValidatorSet, genAccs []authtypes.GenesisAccount, balances ...banktypes.Balance) *App {
+func SetupWithGenesisValSet(t *testing.T, cronosAdmin string, skipGravity bool, valSet *tmtypes.ValidatorSet, genAccs []authtypes.GenesisAccount, balances ...banktypes.Balance) *App {
 	t.Helper()
 
-	app, genesisState := setup(true, 5, experimental)
+	app, genesisState := setup(true, skipGravity, 5)
 	genesisState = genesisStateWithValSet(t, app, genesisState, valSet, genAccs, balances...)
 
 	cronosGen := cronostypes.DefaultGenesis()
@@ -207,41 +190,10 @@ func genesisStateWithValSet(t require.TestingT,
 	})
 
 	// update total supply
-	bankGenesis := banktypes.NewGenesisState(banktypes.DefaultGenesisState().Params, balances, totalSupply, []banktypes.Metadata{})
+	bankGenesis := banktypes.NewGenesisState(banktypes.DefaultGenesisState().Params, balances, totalSupply, []banktypes.Metadata{}, []banktypes.SendEnabled{})
 	genesisState[banktypes.ModuleName] = app.AppCodec().MustMarshalJSON(bankGenesis)
 
 	return genesisState
-}
-
-// SetupWithGenesisAccounts initializes a new App with the provided genesis
-// accounts and possible balances.
-func SetupWithGenesisAccounts(genAccs []authtypes.GenesisAccount, balances ...banktypes.Balance) *App {
-	app, genesisState := setup(true, 0, true)
-	authGenesis := authtypes.NewGenesisState(authtypes.DefaultParams(), genAccs)
-	genesisState[authtypes.ModuleName] = app.AppCodec().MustMarshalJSON(authGenesis)
-
-	totalSupply := sdk.NewCoins()
-	for _, b := range balances {
-		totalSupply = totalSupply.Add(b.Coins...)
-	}
-
-	bankGenesis := banktypes.NewGenesisState(banktypes.DefaultGenesisState().Params, balances, totalSupply, []banktypes.Metadata{})
-	genesisState[banktypes.ModuleName] = app.AppCodec().MustMarshalJSON(bankGenesis)
-
-	stateBytes, err := json.MarshalIndent(genesisState, "", " ")
-	if err != nil {
-		panic(err)
-	}
-
-	app.InitChain(
-		abci.RequestInitChain{
-			ChainId:         TestAppChainID,
-			Validators:      []abci.ValidatorUpdate{},
-			ConsensusParams: DefaultConsensusParams,
-			AppStateBytes:   stateBytes,
-		},
-	)
-	return app
 }
 
 type GenerateAccountStrategy func(int) []sdk.AccAddress
@@ -367,16 +319,16 @@ func CheckBalance(t *testing.T, app *App, addr sdk.AccAddress, balances sdk.Coin
 // the parameter 'expPass' against the result. A corresponding result is
 // returned.
 func SignCheckDeliver(
-	t *testing.T, txCfg client.TxConfig, app *bam.BaseApp, header tmproto.Header, msgs []sdk.Msg,
+	t *testing.T, txCfg client.TxConfig, app *baseapp.BaseApp, header tmproto.Header, msgs []sdk.Msg,
 	chainID string, accNums, accSeqs []uint64, expSimPass, expPass bool, priv ...cryptotypes.PrivKey,
 ) (sdk.GasInfo, *sdk.Result, error) {
-	tx, err := helpers.GenSignedMockTx(
+	tx, err := simtestutil.GenSignedMockTx(
 		/* #nosec */
 		rand.New(rand.NewSource(time.Now().UnixNano())),
 		txCfg,
 		msgs,
 		sdk.Coins{sdk.NewInt64Coin(sdk.DefaultBondDenom, 0)},
-		helpers.DefaultGenTxGas,
+		simtestutil.DefaultGenTxGas,
 		chainID,
 		accNums,
 		accSeqs,
@@ -422,13 +374,13 @@ func GenSequenceOfTxs(txGen client.TxConfig, msgs []sdk.Msg, accNums []uint64, i
 	txs := make([]sdk.Tx, numToGenerate)
 	var err error
 	for i := 0; i < numToGenerate; i++ {
-		txs[i], err = helpers.GenSignedMockTx(
+		txs[i], err = simtestutil.GenSignedMockTx(
 			/* #nosec */
 			rand.New(rand.NewSource(time.Now().UnixNano())),
 			txGen,
 			msgs,
 			sdk.Coins{sdk.NewInt64Coin(sdk.DefaultBondDenom, 0)},
-			helpers.DefaultGenTxGas,
+			simtestutil.DefaultGenTxGas,
 			"",
 			accNums,
 			initSeqNums,
@@ -473,9 +425,21 @@ func NewPubKeyFromHex(pk string) (res cryptotypes.PubKey) {
 		panic(err)
 	}
 	if len(pkBytes) != ed25519.PubKeySize {
-		panic(errorsmod.Wrap(sdkerrors.ErrInvalidPubKey, "invalid pubkey size"))
+		panic(errors.Wrap(sdkerrors.ErrInvalidPubKey, "invalid pubkey size"))
 	}
 	return &ed25519.PubKey{Key: pkBytes}
+}
+
+// AppOptionsMap is a stub implementing AppOptions which can get data from a map
+type AppOptionsMap map[string]interface{}
+
+func (m AppOptionsMap) Get(key string) interface{} {
+	v, ok := m[key]
+	if !ok {
+		return interface{}(nil)
+	}
+
+	return v
 }
 
 // EmptyAppOptions is a stub implementing AppOptions

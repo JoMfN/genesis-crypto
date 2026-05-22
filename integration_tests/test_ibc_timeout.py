@@ -17,8 +17,7 @@ def ibc(request, tmp_path_factory):
     "prepare-network"
     name = "ibc_timeout"
     path = tmp_path_factory.mktemp(name)
-    network = prepare_network(path, name)
-    yield from network
+    yield from prepare_network(path, name, grantee="signer3")
 
 
 def test_ibc(ibc):
@@ -63,14 +62,18 @@ def test_cronos_transfer_timeout(ibc):
     )
     assert rsp["code"] == 0, rsp["raw_log"]
 
-    new_src_balance = 0
-
     def check_balance_change():
-        nonlocal new_src_balance
+        new_src_balance = get_balance(ibc.cronos, src_addr, src_denom)
+        get_balance(ibc.chainmain, dst_addr, dst_denom)
+        return old_src_balance != new_src_balance
+
+    wait_for_fn("balance has change", check_balance_change)
+
+    def check_no_change():
         new_src_balance = get_balance(ibc.cronos, src_addr, src_denom)
         get_balance(ibc.chainmain, dst_addr, dst_denom)
         return old_src_balance == new_src_balance
 
-    wait_for_fn("balance no change", check_balance_change)
+    wait_for_fn("balance no change", check_no_change)
     new_dst_balance = get_balance(ibc.chainmain, dst_addr, dst_denom)
     assert old_dst_balance == new_dst_balance

@@ -11,12 +11,12 @@ from .utils import ADDRS, send_transaction, wait_for_port
 def test_versiondb_migration(cronos: Cronos):
     """
     test versiondb migration commands.
-    node0 has versiondb enabled while node1 don't,
+    node0 has memiavl and versiondb enabled while node1 don't,
     - stop all the nodes
-    - dump change set
+    - dump change set from node1's application.db
     - verify change set and save snapshot
     - restore pruned application.db from the snapshot
-    - replace node0/node1's application.db with the restored one
+    - replace node1's application.db with the restored one
     - build versiondb for node0
     - start the nodes, now check:
       - the network can grow
@@ -45,37 +45,28 @@ def test_versiondb_migration(cronos: Cronos):
 
     changeset_dir = tempfile.mkdtemp(dir=cronos.base_dir)
     print("dump to:", changeset_dir)
-    print(cli0.changeset_dump(changeset_dir))
+    print(cli1.changeset_dump(changeset_dir))
     snapshot_dir = tempfile.mkdtemp(dir=cronos.base_dir)
     print("verify and save to snapshot:", snapshot_dir)
     _, commit_info = cli0.changeset_verify(changeset_dir, save_snapshot=snapshot_dir)
     latest_version = commit_info["version"]
 
     # replace existing `application.db`
-    app_db0 = cli0.data_dir / "data/application.db"
     app_db1 = cli1.data_dir / "data/application.db"
-    print("replace node db:", app_db0)
-    shutil.rmtree(app_db0)
-    print(cli0.changeset_restore_app_db(snapshot_dir, app_db0))
     print("replace node db:", app_db1)
     shutil.rmtree(app_db1)
-    shutil.copytree(app_db0, app_db1)
+    print(cli1.changeset_restore_app_db(snapshot_dir, app_db1))
 
     print("restore versiondb for node0")
     sst_dir = tempfile.mkdtemp(dir=cronos.base_dir)
     print(cli0.changeset_build_versiondb_sst(changeset_dir, sst_dir))
-    tmpdir = tempfile.mkdtemp(dir=cronos.base_dir)
     print(
         cli0.changeset_ingest_versiondb_sst(
-            tmpdir, sst_dir, maximum_version=latest_version
+            cli0.data_dir / "data/versiondb", sst_dir, maximum_version=latest_version
         )
     )
-    versiondb_dir = cli0.data_dir / "data/versiondb"
-    shutil.rmtree(versiondb_dir)
-    shutil.move(tmpdir, versiondb_dir)
 
-    # force app-db-backend to be rocksdb
-    patch_app_db_backend(cli0.data_dir / "config/app.toml", "rocksdb")
+    # force node1's app-db-backend to be rocksdb
     patch_app_db_backend(cli1.data_dir / "config/app.toml", "rocksdb")
 
     print("start all nodes")
