@@ -64,6 +64,7 @@ package gotoolchain
 
 import (
 	"fmt"
+	// SAFE: init reads runtime.Version() once to refuse unsupported Go toolchains; no chain state depends on it.
 	"runtime"
 	"strconv"
 	"strings"
